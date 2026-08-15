@@ -1,6 +1,6 @@
-# [Project name]
+# Code Me Generation
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Code Me Generation transforme une description en langage naturel en une application web autonome générée par Gemini, puis l'affiche immédiatement dans un aperçu isolé.
 
 ## Run & Operate
 
@@ -22,23 +22,36 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/code-me-generation/src/pages/home.tsx` — atelier principal, saisie du brief, états de génération, iframe et code source.
+- `artifacts/code-me-generation/src/index.css` — thème visuel sombre, tokens de couleur et animations.
+- `artifacts/api-server/src/routes/generate.ts` — génération Gemini et prompt système HTML-only.
+- `lib/api-spec/openapi.yaml` — contrat source de `POST /api/generate`.
+- `lib/api-client-react/src/generated/` et `lib/api-zod/src/generated/` — clients générés depuis OpenAPI.
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- Le frontend passe par le client généré OpenAPI afin que la validation du brief et la réponse HTML restent alignées entre client et serveur.
+- Chaque résultat Gemini est rendu via `iframe.srcDoc` avec un sandbox limité, sans écrire le code généré dans le DOM de l'application.
+- Le backend utilise l'API officielle `@google/genai` et conserve la clé uniquement dans `GEMINI_API_KEY`.
+- Le modèle de génération est `gemini-3-flash-preview`, car les modèles Gemini 1.5/2.5 sont indisponibles pour les nouvelles clés utilisées ici.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Décrire une idée d'application en français ou en langage naturel.
+- Générer un fichier autonome HTML/CSS/JavaScript avec Gemini.
+- Visualiser le résultat en live dans un aperçu isolé.
+- Lire, copier et réinitialiser le code source généré.
+- Recevoir un message explicite en cas de brief invalide, quota Gemini ou erreur serveur.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- L'interface doit être moderne, sombre, épurée, très responsive et inspirée de Replit.
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Après toute modification d'OpenAPI, relancer `pnpm --filter @workspace/api-spec run codegen`.
+- Pour un build Vite manuel, fournir `PORT` et `BASE_PATH`; le workflow les injecte automatiquement.
+- Les apps générées sont du HTML autonome et sont volontairement isolées dans l'iframe.
 
 ## Pointers
 

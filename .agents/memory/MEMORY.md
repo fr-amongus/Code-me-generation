@@ -1,0 +1,1 @@
+- [Gemini model availability](gemini-model-availability.md) — new user keys may reject older Gemini IDs; verify the live model before debugging prompts.

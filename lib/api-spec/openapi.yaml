@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: generation
+    description: AI application generation operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,43 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /generate:
+    post:
+      operationId: generateApplication
+      tags: [generation]
+      summary: Generate a standalone web application
+      description: Generates a complete HTML/CSS/JavaScript application from a natural language description.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateApplicationInput"
+      responses:
+        "200":
+          description: Generated application
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GeneratedApplication"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: Gemini rate limit reached
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "500":
+          description: Generation service error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +72,27 @@ components:
           type: string
       required:
         - status
+    GenerateApplicationInput:
+      type: object
+      properties:
+        prompt:
+          type: string
+          minLength: 3
+          maxLength: 10000
+      required:
+        - prompt
+    GeneratedApplication:
+      type: object
+      properties:
+        html:
+          type: string
+      required:
+        - html
+    ApiError:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
 
