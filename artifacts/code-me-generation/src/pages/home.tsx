@@ -5,6 +5,7 @@ import {
   Check,
   Code2,
   Copy,
+  Download,
   FileCode2,
   Globe2,
   Layers3,
@@ -122,6 +123,7 @@ export default function Home() {
   const [prompt, setPrompt] = useState('');
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('preview');
   const [copied, setCopied] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const { data, isPending, error, mutate, reset } = useGenerateApplication();
   const hasResult = Boolean(data?.html);
   const canGenerate = prompt.trim().length >= 3 && !isPending;
@@ -156,6 +158,42 @@ export default function Home() {
       window.setTimeout(() => setCopied(false), 1800);
     } catch {
       setCopied(false);
+    }
+  };
+
+  const handleDownload = async () => {
+    if (!data?.html || isDownloading) return;
+
+    setIsDownloading(true);
+    try {
+      const JSZip = (await import('jszip')).default;
+      const zip = new JSZip();
+      const projectName =
+        prompt
+          .normalize('NFD')
+          .replace(/\p{Diacritic}/gu, '')
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '')
+          .slice(0, 48) || 'generated-app';
+
+      zip.file('index.html', data.html);
+      zip.file(
+        'README.md',
+        `# ${projectName}\n\nApplication générée avec Code Me Generation.\n\n## Lancer le projet\n\nOuvre simplement \`index.html\` dans ton navigateur. Le projet est autonome : le HTML, le CSS et le JavaScript sont regroupés dans un seul fichier.\n\n## Brief original\n\n${prompt.trim()}\n`,
+      );
+
+      const blob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `${projectName}.zip`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -313,6 +351,17 @@ export default function Home() {
                   >
                     {copied ? <Check className="size-3.5 text-[hsl(var(--primary))]" /> : <Copy className="size-3.5" />}
                     {copied ? 'Copié' : 'Copier'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDownload}
+                    disabled={isDownloading}
+                    className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(var(--primary)/.28)] bg-[hsl(var(--primary)/.08)] px-2.5 py-1.5 text-[10px] text-[hsl(var(--primary))] transition-colors hover:bg-[hsl(var(--primary)/.14)] disabled:cursor-wait disabled:opacity-60"
+                    data-testid="button-download-project"
+                    aria-label="Télécharger le projet au format ZIP"
+                  >
+                    <Download className={`size-3.5 ${isDownloading ? 'animate-bounce' : ''}`} />
+                    {isDownloading ? 'Préparation...' : 'Télécharger le ZIP'}
                   </button>
                 </div>
               )}
