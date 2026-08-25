@@ -12,6 +12,10 @@ tags:
     description: Health operations
   - name: generation
     description: AI application generation operations
+  - name: projects
+    description: Saved project workspace operations
+  - name: chat
+    description: Project improvement conversations
 paths:
   /healthz:
     get:
@@ -63,6 +67,208 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /projects:
+    get:
+      operationId: listProjects
+      tags: [projects]
+      summary: List saved projects for a workspace
+      parameters:
+        - name: workspaceId
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 8
+            maxLength: 128
+      responses:
+        "200":
+          description: Saved projects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Project"
+        "400":
+          description: Invalid workspace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    post:
+      operationId: createProject
+      tags: [projects]
+      summary: Create a saved project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectInput"
+      responses:
+        "201":
+          description: Created project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          description: Invalid project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /projects/{id}:
+    patch:
+      operationId: updateProject
+      tags: [projects]
+      summary: Update a saved project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectUpdate"
+      responses:
+        "200":
+          description: Updated project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "400":
+          description: Invalid project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      operationId: deleteProject
+      tags: [projects]
+      summary: Delete a saved project
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: number
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectWorkspaceInput"
+      responses:
+        "204":
+          description: Project deleted
+        "400":
+          description: Invalid workspace or project id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /projects/{projectId}/messages:
+    get:
+      operationId: listProjectMessages
+      tags: [chat]
+      summary: List the saved messages for a project
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: number
+            minimum: 1
+      responses:
+        "200":
+          description: Project conversation messages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProjectMessage"
+        "400":
+          description: Invalid project or workspace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /projects/{projectId}/chat:
+    post:
+      operationId: sendProjectMessage
+      tags: [chat]
+      summary: Improve a project through a saved chat message
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: number
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectChatInput"
+      responses:
+        "200":
+          description: Updated project and saved conversation messages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectChatResult"
+        "400":
+          description: Invalid project message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: Gemini rate limit reached
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "500":
+          description: Chat generation service error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   schemas:
     HealthStatus:
@@ -79,6 +285,11 @@ components:
           type: string
           minLength: 3
           maxLength: 10000
+        attachments:
+          type: array
+          maxItems: 5
+          items:
+            $ref: "#/components/schemas/AttachmentInput"
       required:
         - prompt
     GeneratedApplication:
@@ -95,4 +306,149 @@ components:
           type: string
       required:
         - error
+    Project:
+      type: object
+      properties:
+        id:
+          type: number
+        workspaceId:
+          type: string
+        name:
+          type: string
+        prompt:
+          type: string
+        html:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - workspaceId
+        - name
+        - prompt
+        - html
+        - createdAt
+        - updatedAt
+    ProjectInput:
+      type: object
+      properties:
+        workspaceId:
+          type: string
+          minLength: 8
+          maxLength: 128
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        prompt:
+          type: string
+          maxLength: 10000
+        html:
+          type: ["string", "null"]
+          maxLength: 2000000
+      required:
+        - workspaceId
+        - name
+    ProjectUpdate:
+      type: object
+      properties:
+        workspaceId:
+          type: string
+          minLength: 8
+          maxLength: 128
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        prompt:
+          type: string
+          maxLength: 10000
+        html:
+          type: ["string", "null"]
+          maxLength: 2000000
+      required:
+        - workspaceId
+    ProjectWorkspaceInput:
+      type: object
+      properties:
+        workspaceId:
+          type: string
+          minLength: 8
+          maxLength: 128
+      required:
+        - workspaceId
+    ProjectMessage:
+      type: object
+      properties:
+        id:
+          type: number
+        projectId:
+          type: number
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - projectId
+        - role
+        - content
+        - createdAt
+    ProjectChatInput:
+      type: object
+      properties:
+        workspaceId:
+          type: string
+          minLength: 8
+          maxLength: 128
+        message:
+          type: string
+          minLength: 1
+          maxLength: 10000
+        attachments:
+          type: array
+          maxItems: 5
+          items:
+            $ref: "#/components/schemas/AttachmentInput"
+      required:
+        - workspaceId
+        - message
+    AttachmentInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        type:
+          type: string
+          maxLength: 120
+        content:
+          type: string
+          maxLength: 6000000
+      required:
+        - name
+        - type
+        - content
+    ProjectChatResult:
+      type: object
+      properties:
+        project:
+          $ref: "#/components/schemas/Project"
+        userMessage:
+          $ref: "#/components/schemas/ProjectMessage"
+        assistantMessage:
+          $ref: "#/components/schemas/ProjectMessage"
+      required:
+        - project
+        - userMessage
+        - assistantMessage
 

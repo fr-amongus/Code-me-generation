@@ -7,12 +7,17 @@
  */
 import type { AttachmentInput } from './attachmentInput';
 
-export interface GenerateApplicationInput {
+export interface ProjectChatInput {
   /**
-     * @minLength 3
+     * @minLength 8
+     * @maxLength 128
+     */
+  workspaceId: string;
+  /**
+     * @minLength 1
      * @maxLength 10000
      */
-  prompt: string;
+  message: string;
   /** @maxItems 5 */
   attachments?: AttachmentInput[];
 }

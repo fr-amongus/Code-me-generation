@@ -7,6 +7,16 @@
  */
 
 export * from './apiError';
+export * from './attachmentInput';
 export * from './generateApplicationInput';
 export * from './generatedApplication';
 export * from './healthStatus';
+export * from './listProjectsParams';
+export * from './project';
+export * from './projectChatInput';
+export * from './projectChatResult';
+export * from './projectInput';
+export * from './projectMessage';
+export * from './projectMessageRole';
+export * from './projectUpdate';
+export * from './projectWorkspaceInput';

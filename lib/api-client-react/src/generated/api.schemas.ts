@@ -9,12 +9,26 @@ export interface HealthStatus {
   status: string;
 }
 
+export interface AttachmentInput {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  name: string;
+  /** @maxLength 120 */
+  type: string;
+  /** @maxLength 6000000 */
+  content: string;
+}
+
 export interface GenerateApplicationInput {
   /**
      * @minLength 3
      * @maxLength 10000
      */
   prompt: string;
+  /** @maxItems 5 */
+  attachments?: AttachmentInput[];
 }
 
 export interface GeneratedApplication {
@@ -24,4 +38,108 @@ export interface GeneratedApplication {
 export interface ApiError {
   error: string;
 }
+
+export interface Project {
+  id: number;
+  workspaceId: string;
+  name: string;
+  prompt: string;
+  /** @nullable */
+  html: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProjectInput {
+  /**
+     * @minLength 8
+     * @maxLength 128
+     */
+  workspaceId: string;
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  name: string;
+  /** @maxLength 10000 */
+  prompt?: string;
+  /**
+     * @maxLength 2000000
+     * @nullable
+     */
+  html?: string | null;
+}
+
+export interface ProjectUpdate {
+  /**
+     * @minLength 8
+     * @maxLength 128
+     */
+  workspaceId: string;
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  name?: string;
+  /** @maxLength 10000 */
+  prompt?: string;
+  /**
+     * @maxLength 2000000
+     * @nullable
+     */
+  html?: string | null;
+}
+
+export interface ProjectWorkspaceInput {
+  /**
+     * @minLength 8
+     * @maxLength 128
+     */
+  workspaceId: string;
+}
+
+export type ProjectMessageRole = typeof ProjectMessageRole[keyof typeof ProjectMessageRole];
+
+
+export const ProjectMessageRole = {
+  user: 'user',
+  assistant: 'assistant',
+} as const;
+
+export interface ProjectMessage {
+  id: number;
+  projectId: number;
+  role: ProjectMessageRole;
+  content: string;
+  createdAt: string;
+}
+
+export interface ProjectChatInput {
+  /**
+     * @minLength 8
+     * @maxLength 128
+     */
+  workspaceId: string;
+  /**
+     * @minLength 1
+     * @maxLength 10000
+     */
+  message: string;
+  /** @maxItems 5 */
+  attachments?: AttachmentInput[];
+}
+
+export interface ProjectChatResult {
+  project: Project;
+  userMessage: ProjectMessage;
+  assistantMessage: ProjectMessage;
+}
+
+export type ListProjectsParams = {
+/**
+ * @minLength 8
+ * @maxLength 128
+ */
+workspaceId: string;
+};
 

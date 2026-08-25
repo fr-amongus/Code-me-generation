@@ -24,14 +24,226 @@ export const HealthCheckResponse = zod.object({
 export const generateApplicationBodyPromptMin = 3;
 export const generateApplicationBodyPromptMax = 10000;
 
+export const generateApplicationBodyAttachmentsItemNameMax = 200;
+
+export const generateApplicationBodyAttachmentsItemTypeMax = 120;
+
+export const generateApplicationBodyAttachmentsItemContentMax = 6000000;
+
+export const generateApplicationBodyAttachmentsMax = 5;
+
 
 
 export const GenerateApplicationBody = zod.object({
-  "prompt": zod.string().min(generateApplicationBodyPromptMin).max(generateApplicationBodyPromptMax)
+  "prompt": zod.string().min(generateApplicationBodyPromptMin).max(generateApplicationBodyPromptMax),
+  "attachments": zod.array(zod.object({
+  "name": zod.string().min(1).max(generateApplicationBodyAttachmentsItemNameMax),
+  "type": zod.string().max(generateApplicationBodyAttachmentsItemTypeMax),
+  "content": zod.string().max(generateApplicationBodyAttachmentsItemContentMax)
+})).max(generateApplicationBodyAttachmentsMax).optional()
 })
 
 export const GenerateApplicationResponse = zod.object({
   "html": zod.string()
+})
+
+
+/**
+ * @summary List saved projects for a workspace
+ */
+export const listProjectsQueryWorkspaceIdMin = 8;
+export const listProjectsQueryWorkspaceIdMax = 128;
+
+
+
+export const ListProjectsQueryParams = zod.object({
+  "workspaceId": zod.coerce.string().min(listProjectsQueryWorkspaceIdMin).max(listProjectsQueryWorkspaceIdMax)
+})
+
+export const ListProjectsResponseItem = zod.object({
+  "id": zod.number(),
+  "workspaceId": zod.string(),
+  "name": zod.string(),
+  "prompt": zod.string(),
+  "html": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListProjectsResponse = zod.array(ListProjectsResponseItem)
+
+
+/**
+ * @summary Create a saved project
+ */
+export const createProjectBodyWorkspaceIdMin = 8;
+export const createProjectBodyWorkspaceIdMax = 128;
+
+export const createProjectBodyNameMax = 80;
+
+export const createProjectBodyPromptMax = 10000;
+
+export const createProjectBodyHtmlMax = 2000000;
+
+
+
+export const CreateProjectBody = zod.object({
+  "workspaceId": zod.string().min(createProjectBodyWorkspaceIdMin).max(createProjectBodyWorkspaceIdMax),
+  "name": zod.string().min(1).max(createProjectBodyNameMax),
+  "prompt": zod.string().max(createProjectBodyPromptMax).optional(),
+  "html": zod.string().max(createProjectBodyHtmlMax).nullish()
+})
+
+export const CreateProjectResponse = zod.object({
+  "id": zod.number(),
+  "workspaceId": zod.string(),
+  "name": zod.string(),
+  "prompt": zod.string(),
+  "html": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Update a saved project
+ */
+
+
+
+export const UpdateProjectParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+export const updateProjectBodyWorkspaceIdMin = 8;
+export const updateProjectBodyWorkspaceIdMax = 128;
+
+export const updateProjectBodyNameMax = 80;
+
+export const updateProjectBodyPromptMax = 10000;
+
+export const updateProjectBodyHtmlMax = 2000000;
+
+
+
+export const UpdateProjectBody = zod.object({
+  "workspaceId": zod.string().min(updateProjectBodyWorkspaceIdMin).max(updateProjectBodyWorkspaceIdMax),
+  "name": zod.string().min(1).max(updateProjectBodyNameMax).optional(),
+  "prompt": zod.string().max(updateProjectBodyPromptMax).optional(),
+  "html": zod.string().max(updateProjectBodyHtmlMax).nullish()
+})
+
+export const UpdateProjectResponse = zod.object({
+  "id": zod.number(),
+  "workspaceId": zod.string(),
+  "name": zod.string(),
+  "prompt": zod.string(),
+  "html": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a saved project
+ */
+
+
+
+export const DeleteProjectParams = zod.object({
+  "id": zod.coerce.number().min(1)
+})
+
+export const deleteProjectBodyWorkspaceIdMin = 8;
+export const deleteProjectBodyWorkspaceIdMax = 128;
+
+
+
+export const DeleteProjectBody = zod.object({
+  "workspaceId": zod.string().min(deleteProjectBodyWorkspaceIdMin).max(deleteProjectBodyWorkspaceIdMax)
+})
+
+export const DeleteProjectResponse = zod.void()
+
+
+/**
+ * @summary List the saved messages for a project
+ */
+
+
+
+export const ListProjectMessagesParams = zod.object({
+  "projectId": zod.coerce.number().min(1)
+})
+
+export const ListProjectMessagesResponseItem = zod.object({
+  "id": zod.number(),
+  "projectId": zod.number(),
+  "role": zod.enum(['user', 'assistant']),
+  "content": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+export const ListProjectMessagesResponse = zod.array(ListProjectMessagesResponseItem)
+
+
+/**
+ * @summary Improve a project through a saved chat message
+ */
+
+
+
+export const SendProjectMessageParams = zod.object({
+  "projectId": zod.coerce.number().min(1)
+})
+
+export const sendProjectMessageBodyWorkspaceIdMin = 8;
+export const sendProjectMessageBodyWorkspaceIdMax = 128;
+
+export const sendProjectMessageBodyMessageMax = 10000;
+
+export const sendProjectMessageBodyAttachmentsItemNameMax = 200;
+
+export const sendProjectMessageBodyAttachmentsItemTypeMax = 120;
+
+export const sendProjectMessageBodyAttachmentsItemContentMax = 6000000;
+
+export const sendProjectMessageBodyAttachmentsMax = 5;
+
+
+
+export const SendProjectMessageBody = zod.object({
+  "workspaceId": zod.string().min(sendProjectMessageBodyWorkspaceIdMin).max(sendProjectMessageBodyWorkspaceIdMax),
+  "message": zod.string().min(1).max(sendProjectMessageBodyMessageMax),
+  "attachments": zod.array(zod.object({
+  "name": zod.string().min(1).max(sendProjectMessageBodyAttachmentsItemNameMax),
+  "type": zod.string().max(sendProjectMessageBodyAttachmentsItemTypeMax),
+  "content": zod.string().max(sendProjectMessageBodyAttachmentsItemContentMax)
+})).max(sendProjectMessageBodyAttachmentsMax).optional()
+})
+
+export const SendProjectMessageResponse = zod.object({
+  "project": zod.object({
+  "id": zod.number(),
+  "workspaceId": zod.string(),
+  "name": zod.string(),
+  "prompt": zod.string(),
+  "html": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}),
+  "userMessage": zod.object({
+  "id": zod.number(),
+  "projectId": zod.number(),
+  "role": zod.enum(['user', 'assistant']),
+  "content": zod.string(),
+  "createdAt": zod.coerce.date()
+}),
+  "assistantMessage": zod.object({
+  "id": zod.number(),
+  "projectId": zod.number(),
+  "role": zod.enum(['user', 'assistant']),
+  "content": zod.string(),
+  "createdAt": zod.coerce.date()
+})
 })
 
 

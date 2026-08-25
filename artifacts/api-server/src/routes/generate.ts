@@ -14,6 +14,21 @@ The result must work offline in a browser without a build step or external depen
 Make the application polished, responsive, accessible, and fully interactive based on the user's request.
 `;
 
+type Attachment = { name: string; type: string; content: string };
+
+function buildPromptParts(prompt: string, attachments: Attachment[] | undefined) {
+  const parts: Array<{ text?: string; inlineData?: { mimeType: string; data: string } }> = [{ text: `Build this web application:\n\n${prompt}` }];
+  for (const attachment of attachments ?? []) {
+    if ((attachment.type.startsWith("image/") || attachment.type === "application/pdf") && attachment.content.startsWith("data:")) {
+      const [, data = ""] = attachment.content.split(",", 2);
+      parts.push({ inlineData: { mimeType: attachment.type, data } });
+    } else {
+      parts.push({ text: `\nAttached file: ${attachment.name} (${attachment.type})\n${attachment.content}` });
+    }
+  }
+  return parts;
+}
+
 function getErrorStatus(error: unknown): number | undefined {
   if (!error || typeof error !== "object") {
     return undefined;
@@ -56,7 +71,7 @@ router.post("/generate", async (req, res) => {
     const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: `Build this web application:\n\n${parsed.data.prompt}`,
+      contents: [{ role: "user", parts: buildPromptParts(parsed.data.prompt, parsed.data.attachments) }],
       config: {
         systemInstruction: SYSTEM_PROMPT,
         temperature: 0.25,
