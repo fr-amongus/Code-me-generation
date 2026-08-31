@@ -105,6 +105,8 @@ function buildChatParts(
 
 function chooseChatProvider(message: string, hasAttachments: boolean, projectHtmlLength: number): "gemini" | "groq1" | "groq2" {
   const normalized = message.toLowerCase();
+  const isDiagnostic = /\b(erreur|bug|exception|stack trace|console|preview|aperçu|sécurité|vulnérabilité|scan|corrig(e|er|ez)|fix)\b/i.test(normalized);
+  if (isDiagnostic && projectHtmlLength <= 30000 && !hasAttachments) return "groq2";
   if (
     hasAttachments ||
     message.length > 1400 ||
@@ -112,9 +114,6 @@ function chooseChatProvider(message: string, hasAttachments: boolean, projectHtm
     /\b(refonte|architecture|authentification|base de données|backend|api|plusieurs pages|application complète|entièrement|from scratch|gros changement|complexe)\b/i.test(normalized)
   ) {
     return "gemini";
-  }
-  if (/\b(erreur|bug|exception|stack trace|console|preview|aperçu|sécurité|vulnérabilité|scan|corrig(e|er|ez)|fix)\b/i.test(normalized)) {
-    return "groq2";
   }
   return "groq1";
 }

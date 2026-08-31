@@ -277,7 +277,7 @@ function ChatBubble({ message }: { message: ProjectMessage }) {
 
 export default function Home() {
   const queryClient = useQueryClient();
-  const { user, isAuthenticated, login, logout } = useAuth();
+  const { user, isLoading: isAuthLoading, isAuthenticated, login, logout } = useAuth();
   const workspaceId = useMemo(() => user?.id ?? getWorkspaceId(), [user?.id]);
   const [prompt, setPrompt] = useState('');
   const [chatInput, setChatInput] = useState('');
@@ -296,6 +296,8 @@ export default function Home() {
   const [consoleEntries, setConsoleEntries] = useState<ConsoleEntry[]>([]);
   const [toolPanel, setToolPanel] = useState<'security' | 'shell' | null>(null);
   const [securityReport, setSecurityReport] = useState<SecurityReport | null>(null);
+  const [isFixingSecurity, setIsFixingSecurity] = useState(false);
+  const [securityFixMessage, setSecurityFixMessage] = useState('');
   const [isScanning, setIsScanning] = useState(false);
   const [shellCommand, setShellCommand] = useState('help');
   const [shellOutput, setShellOutput] = useState('Sélectionne une commande puis appuie sur Entrée.');
@@ -304,7 +306,8 @@ export default function Home() {
   const [selectedVersionId, setSelectedVersionId] = useState('');
 
   const projectsQuery = useListProjects({ workspaceId });
-  const activeProject = projectsQuery.data?.find((project) => project.id === selectedProjectId) ?? null;
+  const activeProject = isAuthenticated ? projectsQuery.data?.find((project) => project.id === selectedProjectId) ?? null : null;
+  const visibleProjects = isAuthenticated ? (projectsQuery.data ?? []) : [];
   const messagesQuery = useListProjectMessages(activeProject?.id ?? 0, {
     query: {
       queryKey: getListProjectMessagesQueryKey(activeProject?.id ?? 0),
@@ -363,11 +366,11 @@ export default function Home() {
   };
 
   useEffect(() => {
-    if (projectsQuery.data?.length && (selectedProjectId === null || !projectsQuery.data.some((project) => project.id === selectedProjectId))) {
-      setSelectedProjectId(projectsQuery.data[0].id);
+    if (visibleProjects.length && (selectedProjectId === null || !visibleProjects.some((project) => project.id === selectedProjectId))) {
+      setSelectedProjectId(visibleProjects[0].id);
       setGeneratedHtml(null);
     }
-  }, [projectsQuery.data, selectedProjectId]);
+  }, [visibleProjects, selectedProjectId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     setGeneratedHtml(null);
@@ -378,10 +381,24 @@ export default function Home() {
     setConsoleEntries([]);
     setToolPanel(null);
     setSecurityReport(null);
+    setSecurityFixMessage('');
     setShellOutput('Sélectionne une commande puis appuie sur Entrée.');
     setVersions([]);
     setSelectedVersionId('');
   }, [selectedProjectId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    try {
+      const pendingPrompt = window.sessionStorage.getItem('code-me-pending-prompt');
+      if (pendingPrompt) {
+        setPrompt(pendingPrompt);
+        window.sessionStorage.removeItem('code-me-pending-prompt');
+      }
+    } catch {
+      // Session storage can be unavailable in privacy-restricted browsers.
+    }
+  }, [isAuthenticated]);
 
   useEffect(() => {
     if (!activeProject) return;
@@ -454,6 +471,11 @@ export default function Home() {
     event.preventDefault();
     const trimmedPrompt = prompt.trim();
     if (trimmedPrompt.length < 3 || isPending) return;
+    if (!isAuthenticated) {
+      try { window.sessionStorage.setItem('code-me-pending-prompt', trimmedPrompt); } catch { /* continue to login */ }
+      login();
+      return;
+    }
     setActiveTab('preview');
     setCopied(false);
     generateMutation.mutate({ data: { prompt: trimmedPrompt, attachments: promptAttachments } }, {
@@ -474,6 +496,10 @@ export default function Home() {
   };
 
   const handleNewProject = () => {
+    if (!isAuthenticated) {
+      login();
+      return;
+    }
     createMutation.mutate({ data: { workspaceId, name: 'Nouveau projet', prompt: '', html: null } }, {
       onSuccess: (project) => {
         setSelectedProjectId(project.id);
@@ -508,6 +534,10 @@ export default function Home() {
   const handleSendChat = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const message = chatInput.trim();
+    if (!isAuthenticated) {
+      login();
+      return;
+    }
     if (!activeProject || !message || isChatPending) return;
     chatMutation.mutate({ projectId: activeProject.id, data: { workspaceId, message, attachments: promptAttachments } }, {
       onSuccess: (result) => {
@@ -576,6 +606,10 @@ export default function Home() {
   };
 
   const handleFixPreview = () => {
+    if (!isAuthenticated) {
+      login();
+      return;
+    }
     if (!activeProject || (!previewError && !error) || isChatPending) return;
     const detectedError = previewError || getErrorMessage(error);
     const message = `Une erreur a été détectée dans le projet : "${detectedError}". Analyse le HTML actuel, corrige la cause sans supprimer les fonctionnalités existantes, puis explique précisément le correctif.`;
@@ -585,6 +619,35 @@ export default function Home() {
         queryClient.setQueryData<Project[]>(getListProjectsQueryKey({ workspaceId }), (previous) => previous?.map((project) => project.id === result.project.id ? result.project : project));
         queryClient.setQueryData<ProjectMessage[]>(getListProjectMessagesQueryKey(activeProject.id), (previous) => [...(previous ?? []), result.userMessage, result.assistantMessage]);
       },
+    });
+  };
+
+  const handleFixSecurity = () => {
+    if (!securityReport?.findings.length || isFixingSecurity || isChatPending) return;
+    if (!isAuthenticated) {
+      login();
+      return;
+    }
+    const findings = securityReport.findings.slice(0, 16).map((finding) =>
+      `- [${finding.severity}] ${finding.title}${finding.line ? ` (ligne ${finding.line})` : ''}: ${finding.message} Correction attendue: ${finding.remediation}`,
+    ).join('\n');
+    setIsFixingSecurity(true);
+    setSecurityFixMessage('');
+    chatMutation.mutate({
+      projectId: activeProject?.id ?? 0,
+      data: {
+        workspaceId,
+        message: `Corrige les constats du scan de sécurité ci-dessous dans le projet actuel. Vérifie chaque correction dans le HTML et conserve les fonctionnalités existantes. Explique ensuite les changements et la validation.\n\n${findings}`,
+      },
+    }, {
+      onSuccess: (result) => {
+        setSecurityReport(null);
+        setSecurityFixMessage('Correction appliquée. Relance le scan pour vérifier le résultat.');
+        setPreviewError('');
+        queryClient.setQueryData<Project[]>(getListProjectsQueryKey({ workspaceId }), (previous) => previous?.map((project) => project.id === result.project.id ? result.project : project));
+        queryClient.setQueryData<ProjectMessage[]>(getListProjectMessagesQueryKey(result.project.id), (previous) => [...(previous ?? []), result.userMessage, result.assistantMessage]);
+      },
+      onSettled: () => setIsFixingSecurity(false),
     });
   };
 
@@ -635,7 +698,7 @@ export default function Home() {
         <div className="flex items-center gap-7"><BrandMark /><div className="hidden h-5 w-px bg-[hsl(var(--border))] sm:block" /><div className="hidden items-center gap-2 text-[11px] text-[hsl(var(--muted-foreground))] sm:flex"><div className="size-1.5 rounded-full bg-[hsl(var(--primary))] shadow-[0_0_10px_hsl(var(--primary)/.7)]" /><span data-testid="status-workspace">Workspace personnel</span></div></div>
         <div className="flex items-center gap-2"><div className="hidden items-center gap-2 rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--card)/.6)] px-3 py-1.5 font-mono text-[10px] text-[hsl(var(--muted-foreground))] sm:flex"><TerminalSquare className="size-3.5 text-[hsl(var(--accent))]" /> v0.5.0</div><button type="button" onClick={() => { setPrompt(activeProject?.prompt ?? ''); setChatInput(''); setActiveTab('preview'); }} className="group inline-flex items-center gap-2 rounded-lg border border-transparent px-3 py-2 text-[11px] text-[hsl(var(--muted-foreground))] transition-colors hover:border-[hsl(var(--border))] hover:bg-[hsl(var(--card)/.6)] hover:text-[hsl(var(--foreground))]" data-testid="button-reset-header"><RotateCcw className="size-3.5 transition-transform group-hover:-rotate-45" /><span className="hidden sm:inline">Réinitialiser</span></button></div>
       </header>
-      <div className="flex flex-wrap items-center gap-2 border-b border-[hsl(var(--border)/.65)] bg-[hsl(var(--background)/.35)] px-4 py-2.5 sm:px-7">
+       <div className="flex flex-wrap items-center gap-2 border-b border-[hsl(var(--border)/.65)] bg-[hsl(var(--background)/.35)] px-4 py-2.5 sm:px-7">
         <label htmlFor="context-attachments" className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card)/.45)] px-2.5 py-1.5 text-[10px] text-[hsl(var(--muted-foreground))] transition-colors hover:border-[hsl(var(--primary)/.45)] hover:text-[hsl(var(--foreground))]">
           <Paperclip className="size-3.5 text-[hsl(var(--primary))]" />
           Ajouter une image ou un fichier
@@ -663,16 +726,23 @@ export default function Home() {
          {(previewError || error) && <div className="flex items-center gap-2 rounded-md border border-[hsl(var(--destructive)/.3)] bg-[hsl(var(--destructive)/.08)] px-2 py-1 text-[10px] text-[hsl(var(--destructive))]"><span className="max-w-[230px] truncate" title={previewError || getErrorMessage(error)}>{previewError ? `Erreur preview : ${previewError}` : getErrorMessage(error)}</span><button type="button" onClick={handleFixPreview} disabled={!activeProject || isChatPending} className="font-semibold underline">Réparer avec l’IA</button></div>}
          <button type="button" onClick={handleSecurityScan} disabled={!activeProject || isScanning} className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[10px] ${toolPanel === 'security' ? 'border-[hsl(var(--primary)/.45)] bg-[hsl(var(--primary)/.1)] text-[hsl(var(--primary))]' : 'border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'}`}><ShieldCheck className="size-3.5" />{isScanning ? 'Scan...' : 'Scan sécurité'}</button>
          <button type="button" onClick={() => setToolPanel((panel) => panel === 'shell' ? null : 'shell')} disabled={!activeProject} className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[10px] ${toolPanel === 'shell' ? 'border-[hsl(var(--accent)/.45)] bg-[hsl(var(--accent)/.1)] text-[hsl(var(--accent))]' : 'border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'}`}><TerminalSquare className="size-3.5" />Shell</button>
-        <div className="flex items-center gap-2">
+         <div className="flex items-center gap-2">
           {isAuthenticated ? (
             <>
               <span className="hidden text-[10px] text-[hsl(var(--muted-foreground))] sm:inline">{user?.firstName || user?.email || 'Compte connecté'}</span>
               <button type="button" onClick={logout} className="rounded-md border border-[hsl(var(--border))] px-2.5 py-1.5 text-[10px] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">Se déconnecter</button>
             </>
           ) : (
-            <button type="button" onClick={login} className="rounded-md border border-[hsl(var(--primary)/.35)] bg-[hsl(var(--primary)/.08)] px-2.5 py-1.5 text-[10px] font-medium text-[hsl(var(--primary))]">Se connecter pour synchroniser</button>
+             <button type="button" onClick={login} className="rounded-md border border-[hsl(var(--primary)/.35)] bg-[hsl(var(--primary)/.08)] px-2.5 py-1.5 text-[10px] font-medium text-[hsl(var(--primary))]">Créer un compte / Se connecter</button>
           )}
         </div>
+
+       {!isAuthLoading && !isAuthenticated && <div className="border-b border-amber-300/20 bg-amber-300/[.06] px-4 py-3 sm:px-7" role="status" data-testid="banner-auth-required">
+         <div className="mx-auto flex max-w-[1900px] flex-wrap items-center justify-between gap-3">
+           <div className="flex items-start gap-2.5"><AlertCircle className="mt-0.5 size-4 shrink-0 text-amber-200" /><div><p className="text-[11px] font-medium text-amber-100">Créez un compte pour conserver vos projets et votre code</p><p className="mt-1 text-[10px] leading-5 text-amber-100/65">La connexion est requise avant la création ou la sauvegarde. Le compte est créé automatiquement lors de votre première connexion.</p></div></div>
+           <button type="button" onClick={login} className="rounded-lg border border-amber-200/30 bg-amber-200/10 px-3 py-2 text-[10px] font-semibold text-amber-100 hover:bg-amber-200/15">Créer un compte / Se connecter</button>
+         </div>
+       </div>}
       </div>
 
       {toolPanel && <section className="border-b border-[hsl(var(--border)/.65)] bg-[hsl(var(--background)/.55)] px-4 py-3 sm:px-7" data-testid={`panel-tool-${toolPanel}`}>
@@ -682,7 +752,7 @@ export default function Home() {
           <pre className="mt-2 max-h-52 overflow-auto rounded-lg border border-[hsl(var(--border)/.7)] bg-[#090b12] p-3 font-mono text-[10px] leading-5 text-slate-300 whitespace-pre-wrap">{shellOutput}</pre>
         </div> : <div className="mx-auto max-w-[1900px]">
           <div className="mb-2 flex items-center justify-between"><span className="inline-flex items-center gap-1.5 font-mono text-[10px] text-[hsl(var(--primary))]"><ShieldCheck className="size-3.5" /> Scan sécurité du projet</span>{securityReport && <span className={`font-mono text-[10px] ${securityReport.score >= 80 ? 'text-[hsl(var(--primary))]' : 'text-amber-300'}`}>Score {securityReport.score}/100 · {securityReport.findings.length} constat(s)</span>}</div>
-          {!securityReport ? <p className="text-[11px] text-[hsl(var(--muted-foreground))]">Analyse le HTML, le JavaScript et les ressources externes de ce projet.</p> : <div className="space-y-2">{securityReport.findings.length === 0 && <p className="text-[11px] text-[hsl(var(--primary))]">Aucun risque détecté dans les règles analysées.</p>}{securityReport.findings.map((finding) => <details key={finding.id} className="rounded-lg border border-[hsl(var(--border)/.7)] bg-[hsl(var(--card)/.45)] px-3 py-2"><summary className="cursor-pointer list-none text-[11px]"><span className={`mr-2 rounded px-1.5 py-0.5 text-[9px] uppercase ${finding.severity === 'critical' || finding.severity === 'high' ? 'bg-red-400/15 text-red-300' : finding.severity === 'medium' ? 'bg-amber-400/15 text-amber-200' : 'bg-slate-400/15 text-slate-300'}`}>{finding.severity}</span>{finding.title}{finding.line ? ` · ligne ${finding.line}` : ''}</summary><p className="mt-2 text-[10px] leading-5 text-[hsl(var(--muted-foreground))]">{finding.message}</p><p className="mt-1 text-[10px] leading-5 text-[hsl(var(--primary))]">Correction : {finding.remediation}</p>{finding.evidence && <code className="mt-1 block truncate text-[9px] text-slate-400">{finding.evidence}</code>}</details>)}</div>}
+           {!securityReport ? <div><p className="text-[11px] text-[hsl(var(--muted-foreground))]">Analyse le HTML, le JavaScript et les ressources externes de ce projet.</p>{securityFixMessage && <p className="mt-2 text-[10px] text-[hsl(var(--primary))]">{securityFixMessage}</p>}</div> : <div className="space-y-2">{securityReport.findings.length === 0 && <p className="text-[11px] text-[hsl(var(--primary))]">Aucun risque détecté dans les règles analysées.</p>}{securityReport.findings.map((finding) => <details key={finding.id} className="rounded-lg border border-[hsl(var(--border)/.7)] bg-[hsl(var(--card)/.45)] px-3 py-2"><summary className="cursor-pointer list-none text-[11px]"><span className={`mr-2 rounded px-1.5 py-0.5 text-[9px] uppercase ${finding.severity === 'critical' || finding.severity === 'high' ? 'bg-red-400/15 text-red-300' : finding.severity === 'medium' ? 'bg-amber-400/15 text-amber-200' : 'bg-slate-400/15 text-slate-300'}`}>{finding.severity}</span>{finding.title}{finding.line ? ` · ligne ${finding.line}` : ''}</summary><p className="mt-2 text-[10px] leading-5 text-[hsl(var(--muted-foreground))]">{finding.message}</p><p className="mt-1 text-[10px] leading-5 text-[hsl(var(--primary))]">Correction : {finding.remediation}</p>{finding.evidence && <code className="mt-1 block truncate text-[9px] text-slate-400">{finding.evidence}</code>}</details>)}{securityReport.findings.length > 0 && <button type="button" onClick={handleFixSecurity} disabled={isFixingSecurity || isChatPending} className="inline-flex items-center gap-2 rounded-lg bg-[hsl(var(--primary))] px-3 py-2 text-[10px] font-semibold text-[hsl(var(--primary-foreground))] disabled:cursor-not-allowed disabled:opacity-50"><WandSparkles className="size-3.5" />{isFixingSecurity || isChatPending ? 'Correction en cours...' : 'Fixé avec l’IA'}</button>}</div>}
         </div>}
       </section>}
 
@@ -694,7 +764,7 @@ export default function Home() {
       <div className="mx-auto grid max-w-[1900px] grid-cols-1 lg:grid-cols-[238px_315px_minmax(0,1fr)_330px]">
         <aside className="border-b border-[hsl(var(--border)/.8)] bg-[hsl(var(--sidebar)/.7)] p-4 sm:p-6 lg:min-h-[calc(100dvh-68px)] lg:border-b-0 lg:border-r lg:p-5">
           <div className="mb-6 flex items-center justify-between"><div><p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[hsl(var(--muted-foreground))]">Workspace</p><h1 className="mt-1.5 text-[16px] font-medium tracking-[-0.04em]">Projets</h1></div><button type="button" onClick={handleNewProject} disabled={createMutation.isPending} className="grid size-8 place-items-center rounded-lg border border-[hsl(var(--primary)/.3)] bg-[hsl(var(--primary)/.09)] text-[hsl(var(--primary))] transition-colors hover:bg-[hsl(var(--primary)/.16)] disabled:opacity-50]" aria-label="Créer un projet" data-testid="button-new-project"><Plus className="size-4" /></button></div>
-          {projectsQuery.isLoading ? <div className="space-y-2"><div className="pulse-line h-8 rounded-lg bg-[hsl(var(--muted)/.5)]" /><div className="pulse-line h-8 rounded-lg bg-[hsl(var(--muted)/.35)]" /></div> : projectsQuery.data?.length ? <div className="space-y-1">{projectsQuery.data.map((project) => <ProjectRow key={project.id} project={project} active={project.id === selectedProjectId} renaming={project.id === renamingId} renameValue={renameValue} onSelect={() => setSelectedProjectId(project.id)} onStartRename={() => { setRenamingId(project.id); setRenameValue(project.name); }} onRenameChange={setRenameValue} onRenameKeyDown={handleRenameKeyDown} onDelete={() => handleDelete(project)} />)}</div> : <div className="rounded-xl border border-dashed border-[hsl(var(--border))] px-3 py-5 text-center"><Layers3 className="mx-auto size-5 text-[hsl(var(--muted-foreground))]" /><p className="mt-2 text-[11px] leading-5 text-[hsl(var(--muted-foreground))]">Aucun projet sauvegardé.</p><button type="button" onClick={handleNewProject} className="mt-3 text-[11px] font-medium text-[hsl(var(--primary))] hover:underline">Créer maintenant</button></div>}
+           {projectsQuery.isLoading && isAuthenticated ? <div className="space-y-2"><div className="pulse-line h-8 rounded-lg bg-[hsl(var(--muted)/.5)]" /><div className="pulse-line h-8 rounded-lg bg-[hsl(var(--muted)/.35)]" /></div> : visibleProjects.length ? <div className="space-y-1">{visibleProjects.map((project) => <ProjectRow key={project.id} project={project} active={project.id === selectedProjectId} renaming={project.id === renamingId} renameValue={renameValue} onSelect={() => setSelectedProjectId(project.id)} onStartRename={() => { setRenamingId(project.id); setRenameValue(project.name); }} onRenameChange={setRenameValue} onRenameKeyDown={handleRenameKeyDown} onDelete={() => handleDelete(project)} />)}</div> : <div className="rounded-xl border border-dashed border-[hsl(var(--border))] px-3 py-5 text-center"><Layers3 className="mx-auto size-5 text-[hsl(var(--muted-foreground))]" /><p className="mt-2 text-[11px] leading-5 text-[hsl(var(--muted-foreground))]">{isAuthenticated ? 'Aucun projet sauvegardé.' : 'Connectez-vous pour créer et conserver vos projets.'}</p><button type="button" onClick={handleNewProject} className="mt-3 text-[11px] font-medium text-[hsl(var(--primary))] hover:underline">{isAuthenticated ? 'Créer maintenant' : 'Créer un compte / Se connecter'}</button></div>}
           <div className="mt-8 border-t border-[hsl(var(--border)/.75)] pt-5"><p className="font-mono text-[9px] uppercase tracking-[0.18em] text-[hsl(var(--muted-foreground))]">Pistes de départ</p><div className="mt-3 space-y-1">{starterPrompts.map((starter) => <button type="button" key={starter.title} onClick={() => setPrompt(starter.prompt)} className="group flex w-full items-start gap-2.5 rounded-lg px-2 py-2 text-left transition-colors hover:bg-[hsl(var(--card)/.75)]"><span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-[hsl(var(--border))] group-hover:bg-[hsl(var(--primary))]" /><span className="text-[11px] leading-5 text-[hsl(var(--muted-foreground))] group-hover:text-[hsl(var(--foreground))]">{starter.title}</span></button>)}</div></div>
         </aside>
 
