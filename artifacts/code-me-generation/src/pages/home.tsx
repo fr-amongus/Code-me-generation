@@ -45,6 +45,7 @@ import { useAuth } from '@workspace/replit-auth-web';
 type WorkspaceTab = 'preview' | 'code';
 type OutputMode = 'single' | 'advanced';
 type PreviewWidth = 'desktop' | 'tablet' | 'mobile';
+type ConsoleEntry = { level: 'log' | 'warn' | 'error'; message: string; stack?: string; time: string };
 
 const starterPrompts = [
   {
@@ -106,7 +107,12 @@ function projectNameFromPrompt(value: string) {
   return (name.slice(0, 56) || 'Nouveau projet').replace(/[,:;]+$/, '');
 }
 
-type Attachment = { name: string; type: string; content: string };
+function instrumentPreviewHtml(html: string) {
+  const bridge = `<script data-code-me-console>(function(){const send=(level,args,stack)=>{try{parent.postMessage({source:'code-me-preview',level,message:Array.from(args).map(v=>typeof v==='string'?v:JSON.stringify(v)).join(' '),stack:stack||''},'*')}catch(_){}};['log','info','debug'].forEach(k=>{const o=console[k];console[k]=function(){send('log',arguments);o.apply(console,arguments)}});['warn'].forEach(k=>{const o=console[k];console[k]=function(){send('warn',arguments);o.apply(console,arguments)}});['error'].forEach(k=>{const o=console[k];console[k]=function(){send('error',arguments);o.apply(console,arguments)}});window.addEventListener('error',e=>send('error',[e.message],e.error&&e.error.stack));window.addEventListener('unhandledrejection',e=>send('error',[String(e.reason)],e.reason&&e.reason.stack));})();<\/script>`;
+  return html.replace(/<head[^>]*>/i, (match) => `${match}${bridge}`);
+}
+
+type Attachment = { name: string; type: string; content: string; size: number; objectPath?: string };
 
 function readFileAsDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
@@ -132,6 +138,7 @@ async function prepareAttachment(file: File): Promise<Attachment> {
     name: file.name,
     type: file.type || 'application/octet-stream',
     content: isBinaryPreview ? await readFileAsDataUrl(file) : await readFileAsText(file),
+    size: file.size,
   };
 }
 
@@ -283,6 +290,7 @@ export default function Home() {
   const [outputMode, setOutputMode] = useState<OutputMode>('single');
   const [previewWidth, setPreviewWidth] = useState<PreviewWidth>('desktop');
   const [previewError, setPreviewError] = useState('');
+  const [consoleEntries, setConsoleEntries] = useState<ConsoleEntry[]>([]);
   const [versions, setVersions] = useState<Array<{ id: number; html: string; label: string; createdAt: string }>>([]);
   const [selectedVersionId, setSelectedVersionId] = useState('');
 
@@ -314,8 +322,31 @@ export default function Home() {
     const accepted = files.filter((file) => file.size <= 3_500_000);
     if (accepted.length !== files.length) setAttachmentError('Chaque pièce jointe doit faire moins de 3,5 Mo.');
     try {
-      const prepared = await Promise.all(accepted.slice(0, 5).map(prepareAttachment));
+      const prepared = await Promise.all(accepted.slice(0, 5).map(async (file) => {
+        const item = await prepareAttachment(file);
+        if (!isAuthenticated) return item;
+        const upload = await fetch('/api/storage/uploads/request-url', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: file.name, size: file.size, contentType: item.type }),
+        });
+        if (!upload.ok) return item;
+        const payload = await upload.json() as { uploadURL: string; objectPath: string };
+        const stored = await fetch(payload.uploadURL, { method: 'PUT', headers: { 'Content-Type': item.type }, body: file });
+        return stored.ok ? { ...item, objectPath: payload.objectPath } : item;
+      }));
       if (prepared.length) setPromptAttachments((current) => [...current, ...prepared].slice(0, 5));
+      if (activeProject) {
+        await Promise.all(prepared.filter((item): item is Attachment & { objectPath: string } => Boolean(item.objectPath)).map((item) =>
+          fetch(`/api/projects/${activeProject.id}/attachments`, {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ workspaceId, name: item.name, type: item.type, size: item.size, objectPath: item.objectPath }),
+          }),
+        ));
+      }
       if (prepared.length) setAttachmentError('');
     } catch (attachmentReadError) {
       setAttachmentError(attachmentReadError instanceof Error ? attachmentReadError.message : 'Impossible de lire la pièce jointe.');
@@ -335,6 +366,7 @@ export default function Home() {
     setChatInput('');
     setActiveTab('preview');
     setPreviewError('');
+    setConsoleEntries([]);
     setVersions([]);
     setSelectedVersionId('');
   }, [selectedProjectId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -350,8 +382,27 @@ export default function Home() {
   }, [activeProject?.id, workspaceId]);
 
   useEffect(() => {
+    if (!activeProject) return;
+    fetch(`/api/projects/${activeProject.id}/attachments?workspaceId=${encodeURIComponent(workspaceId)}`)
+      .then((response) => response.ok ? response.json() : [])
+      .then((data) => {
+        if (!Array.isArray(data) || data.length === 0) return;
+        setPromptAttachments((current) => {
+          const currentByPath = new Map(current.filter((item) => item.objectPath).map((item) => [item.objectPath, item]));
+          return data.map((item: { name: string; type: string; size: number; objectPath: string }) =>
+            currentByPath.get(item.objectPath) ?? { name: item.name, type: item.type, size: item.size, objectPath: item.objectPath, content: '' },
+          );
+        });
+      })
+      .catch(() => undefined);
+  }, [activeProject?.id, workspaceId]);
+
+  useEffect(() => {
     const iframe = document.querySelector<HTMLIFrameElement>('[data-testid="iframe-live-preview"]');
     if (!iframe) return;
+    if (currentHtml && iframe.srcdoc !== instrumentPreviewHtml(currentHtml)) {
+      iframe.srcdoc = instrumentPreviewHtml(currentHtml);
+    }
     const widths: Record<PreviewWidth, string> = { desktop: '100%', tablet: '768px', mobile: '390px' };
     iframe.style.maxWidth = widths[previewWidth];
     iframe.style.marginInline = previewWidth === 'desktop' ? '0' : 'auto';
@@ -367,6 +418,23 @@ export default function Home() {
     iframe.addEventListener('error', reportError);
     return () => iframe.removeEventListener('error', reportError);
   }, [currentHtml, activeTab]);
+
+  useEffect(() => {
+    const onMessage = (event: MessageEvent<{ source?: string; level?: ConsoleEntry['level']; message?: string; stack?: string }>) => {
+      if (event.data?.source !== 'code-me-preview' || !event.data.message) return;
+      const level = event.data.level === 'warn' || event.data.level === 'error' ? event.data.level : 'log';
+      const entry: ConsoleEntry = {
+        level,
+        message: event.data.message ?? '',
+        stack: event.data.stack,
+        time: new Date().toLocaleTimeString('fr-FR'),
+      };
+      setConsoleEntries((current) => [...current, entry].slice(-100));
+      if (level === 'error') setPreviewError(event.data.message);
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, []);
 
   const invalidateProjects = () => queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey({ workspaceId }) });
 
@@ -552,6 +620,11 @@ export default function Home() {
           )}
         </div>
       </div>
+
+      {consoleEntries.length > 0 && <section className="border-b border-[hsl(var(--border)/.65)] bg-[#090b12] px-4 py-2.5 font-mono text-[10px] sm:px-7" data-testid="panel-preview-console">
+        <div className="mb-2 flex items-center justify-between text-[hsl(var(--muted-foreground))]"><span className="inline-flex items-center gap-1.5"><TerminalSquare className="size-3.5 text-[hsl(var(--primary))]" /> Console preview <span className="rounded bg-[hsl(var(--secondary))] px-1.5 py-0.5">{consoleEntries.length}</span></span><button type="button" onClick={() => { setConsoleEntries([]); setPreviewError(''); }} className="hover:text-[hsl(var(--foreground))]">Effacer</button></div>
+        <div className="max-h-36 space-y-1 overflow-y-auto">{consoleEntries.map((entry, index) => <details key={`${entry.time}-${index}`} open={entry.level === 'error'} className={entry.level === 'error' ? 'text-red-300' : entry.level === 'warn' ? 'text-amber-200' : 'text-slate-300'}><summary className="cursor-pointer list-none"><span className="mr-2 text-slate-500">{entry.time}</span><span className="mr-2 uppercase">{entry.level}</span>{entry.message}</summary>{entry.stack && <pre className="mt-1 whitespace-pre-wrap pl-16 text-[9px] text-red-200/80">{entry.stack}</pre>}</details>)}</div>
+      </section>}
 
       <div className="mx-auto grid max-w-[1900px] grid-cols-1 lg:grid-cols-[238px_315px_minmax(0,1fr)_330px]">
         <aside className="border-b border-[hsl(var(--border)/.8)] bg-[hsl(var(--sidebar)/.7)] p-4 sm:p-6 lg:min-h-[calc(100dvh-68px)] lg:border-b-0 lg:border-r lg:p-5">

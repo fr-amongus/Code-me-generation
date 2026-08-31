@@ -30,6 +30,8 @@ export const generateApplicationBodyAttachmentsItemTypeMax = 120;
 
 export const generateApplicationBodyAttachmentsItemContentMax = 6000000;
 
+export const generateApplicationBodyAttachmentsItemObjectPathMax = 500;
+
 export const generateApplicationBodyAttachmentsMax = 5;
 
 
@@ -39,7 +41,8 @@ export const GenerateApplicationBody = zod.object({
   "attachments": zod.array(zod.object({
   "name": zod.string().min(1).max(generateApplicationBodyAttachmentsItemNameMax),
   "type": zod.string().max(generateApplicationBodyAttachmentsItemTypeMax),
-  "content": zod.string().max(generateApplicationBodyAttachmentsItemContentMax)
+  "content": zod.string().max(generateApplicationBodyAttachmentsItemContentMax),
+  "objectPath": zod.string().max(generateApplicationBodyAttachmentsItemObjectPathMax).optional()
 })).max(generateApplicationBodyAttachmentsMax).optional()
 })
 
@@ -206,6 +209,8 @@ export const sendProjectMessageBodyAttachmentsItemTypeMax = 120;
 
 export const sendProjectMessageBodyAttachmentsItemContentMax = 6000000;
 
+export const sendProjectMessageBodyAttachmentsItemObjectPathMax = 500;
+
 export const sendProjectMessageBodyAttachmentsMax = 5;
 
 
@@ -216,7 +221,8 @@ export const SendProjectMessageBody = zod.object({
   "attachments": zod.array(zod.object({
   "name": zod.string().min(1).max(sendProjectMessageBodyAttachmentsItemNameMax),
   "type": zod.string().max(sendProjectMessageBodyAttachmentsItemTypeMax),
-  "content": zod.string().max(sendProjectMessageBodyAttachmentsItemContentMax)
+  "content": zod.string().max(sendProjectMessageBodyAttachmentsItemContentMax),
+  "objectPath": zod.string().max(sendProjectMessageBodyAttachmentsItemObjectPathMax).optional()
 })).max(sendProjectMessageBodyAttachmentsMax).optional()
 })
 

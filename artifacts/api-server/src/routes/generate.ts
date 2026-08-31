@@ -1,6 +1,7 @@
 import { Router, type IRouter } from "express";
 import { GenerateApplicationBody, GenerateApplicationResponse } from "@workspace/api-zod";
 import { GoogleGenAI } from "@google/genai";
+import { hydrateAttachments } from "../lib/attachment-content";
 
 const router: IRouter = Router();
 
@@ -69,9 +70,10 @@ router.post("/generate", async (req, res) => {
 
   try {
     const ai = new GoogleGenAI({ apiKey });
+    const hydratedAttachments = await hydrateAttachments(parsed.data.attachments);
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: [{ role: "user", parts: buildPromptParts(parsed.data.prompt, parsed.data.attachments) }],
+      contents: [{ role: "user", parts: buildPromptParts(parsed.data.prompt, hydratedAttachments) }],
       config: {
         systemInstruction: SYSTEM_PROMPT,
         temperature: 0.25,

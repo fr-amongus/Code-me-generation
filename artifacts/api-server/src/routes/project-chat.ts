@@ -9,6 +9,7 @@ import {
 } from "@workspace/api-zod";
 import { db, projectMessagesTable, projectVersionsTable, projectsTable } from "@workspace/db";
 import { GoogleGenAI } from "@google/genai";
+import { hydrateAttachments } from "../lib/attachment-content";
 
 const router: IRouter = Router();
 
@@ -162,9 +163,10 @@ router.post("/projects/:projectId/chat", async (req, res): Promise<void> => {
     const conversation = history
       .map((entry) => `${entry.role === "user" ? "Utilisateur" : "Assistant"}: ${entry.content}`)
       .join("\n\n");
+    const hydratedAttachments = await hydrateAttachments(body.data.attachments);
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: [{ role: "user", parts: buildChatParts(project.html ?? "", conversation, body.data.message, body.data.attachments) }],
+      contents: [{ role: "user", parts: buildChatParts(project.html ?? "", conversation, body.data.message, hydratedAttachments) }],
       config: {
         systemInstruction: CHAT_SYSTEM_PROMPT,
         temperature: 0.25,

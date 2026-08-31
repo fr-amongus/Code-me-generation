@@ -6,6 +6,7 @@ import projectChatRouter from "./project-chat";
 import authRouter from "./auth";
 import storageRouter from "./storage";
 import projectVersionsRouter from "./project-versions";
+import projectAttachmentsRouter from "./project-attachments";
 
 const router: IRouter = Router();
 
@@ -16,5 +17,6 @@ router.use(projectChatRouter);
 router.use(authRouter);
 router.use(storageRouter);
 router.use(projectVersionsRouter);
+router.use(projectAttachmentsRouter);
 
 export default router;

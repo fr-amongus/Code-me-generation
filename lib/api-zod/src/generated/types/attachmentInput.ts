@@ -16,4 +16,6 @@ export interface AttachmentInput {
   type: string;
   /** @maxLength 6000000 */
   content: string;
+  /** @maxLength 500 */
+  objectPath?: string;
 }

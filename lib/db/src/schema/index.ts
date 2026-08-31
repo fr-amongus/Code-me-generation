@@ -21,3 +21,4 @@ export * from "./projects";
 export * from "./project-messages";
 export * from "./auth";
 export * from "./project-versions";
+export * from "./project-attachments";

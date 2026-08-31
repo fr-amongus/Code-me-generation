@@ -434,6 +434,9 @@ components:
         content:
           type: string
           maxLength: 6000000
+        objectPath:
+          type: string
+          maxLength: 500
       required:
         - name
         - type
