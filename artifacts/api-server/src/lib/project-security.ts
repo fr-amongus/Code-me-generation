@@ -10,6 +10,16 @@ export type SecurityFinding = {
   remediation: string;
 };
 
+export function buildSecurityReport(findings: SecurityFinding[]) {
+  const weight: Record<SecuritySeverity, number> = { critical: 30, high: 20, medium: 10, low: 5, info: 0 };
+  const score = Math.max(0, 100 - findings.reduce((total, finding) => total + weight[finding.severity], 0));
+  const summary = findings.reduce<Record<string, number>>((counts, finding) => {
+    counts[finding.severity] = (counts[finding.severity] ?? 0) + 1;
+    return counts;
+  }, {});
+  return { scannedAt: new Date().toISOString(), score, findings, summary };
+}
+
 function lineAt(source: string, index: number) {
   return source.slice(0, index).split("\n").length;
 }
@@ -42,11 +52,5 @@ export function scanProjectHtml(html: string) {
     findings.push({ id: "missing-viewport", severity: "info", title: "Viewport absent", message: "La page ne déclare pas de viewport responsive.", remediation: "Ajoute la meta viewport pour un rendu mobile correct." });
   }
 
-  const weight: Record<SecuritySeverity, number> = { critical: 30, high: 20, medium: 10, low: 5, info: 0 };
-  const score = Math.max(0, 100 - findings.reduce((total, finding) => total + weight[finding.severity], 0));
-  const summary = findings.reduce<Record<string, number>>((counts, finding) => {
-    counts[finding.severity] = (counts[finding.severity] ?? 0) + 1;
-    return counts;
-  }, {});
-  return { scannedAt: new Date().toISOString(), score, findings, summary };
+  return buildSecurityReport(findings);
 }
