@@ -8,6 +8,7 @@ import {
   Download,
   FileCode2,
   Globe2,
+  History,
   Layers3,
   Loader2,
   MessageCircle,
@@ -18,7 +19,9 @@ import {
   Plus,
   RotateCcw,
   Send,
+  Smartphone,
   Sparkles,
+  Tablet,
   TerminalSquare,
   Trash2,
   WandSparkles,
@@ -37,8 +40,11 @@ import {
   type ProjectMessage,
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '@workspace/replit-auth-web';
 
 type WorkspaceTab = 'preview' | 'code';
+type OutputMode = 'single' | 'advanced';
+type PreviewWidth = 'desktop' | 'tablet' | 'mobile';
 
 const starterPrompts = [
   {
@@ -52,6 +58,18 @@ const starterPrompts = [
   {
     title: 'Suivi de projets',
     prompt: 'Un espace de suivi de projets avec des colonnes kanban, des filtres par priorité et une vue activité.',
+  },
+  {
+    title: 'Portfolio créatif',
+    prompt: 'Un portfolio créatif responsive pour un designer indépendant, avec projets filtrables, présentation personnelle et formulaire de contact.',
+  },
+  {
+    title: 'Mini-jeu',
+    prompt: 'Un mini-jeu de mémoire accessible avec cartes animées, score, chronomètre et bouton pour recommencer.',
+  },
+  {
+    title: 'Prise de notes',
+    prompt: 'Une application de prise de notes avec recherche, catégories, favoris, éditeur et sauvegarde locale dans le navigateur.',
   },
 ];
 
@@ -240,7 +258,7 @@ function ChatBubble({ message }: { message: ProjectMessage }) {
   return (
     <div className={`flex gap-2.5 ${isUser ? 'justify-end' : 'justify-start'}`}>
       {!isUser && <div className="mt-0.5 grid size-6 shrink-0 place-items-center rounded-lg bg-[hsl(var(--accent)/.13)] text-[hsl(var(--accent))]"><Sparkles className="size-3.5" /></div>}
-      <div className={`max-w-[88%] rounded-2xl px-3 py-2.5 text-[12px] leading-5 ${isUser ? 'rounded-br-md bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'rounded-bl-md border border-[hsl(var(--border))] bg-[hsl(var(--card)/.72)] text-[hsl(var(--foreground)/.86)]'}`}>
+      <div className={`max-w-[88%] whitespace-pre-wrap rounded-2xl px-3 py-2.5 text-[12px] leading-5 ${isUser ? 'rounded-br-md bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'rounded-bl-md border border-[hsl(var(--border))] bg-[hsl(var(--card)/.72)] text-[hsl(var(--foreground)/.86)]'}`}>
         {message.content}
       </div>
     </div>
@@ -249,7 +267,8 @@ function ChatBubble({ message }: { message: ProjectMessage }) {
 
 export default function Home() {
   const queryClient = useQueryClient();
-  const workspaceId = useMemo(getWorkspaceId, []);
+  const { user, isAuthenticated, login, logout } = useAuth();
+  const workspaceId = useMemo(() => user?.id ?? getWorkspaceId(), [user?.id]);
   const [prompt, setPrompt] = useState('');
   const [chatInput, setChatInput] = useState('');
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('preview');
@@ -261,6 +280,11 @@ export default function Home() {
   const [renameValue, setRenameValue] = useState('');
   const [promptAttachments, setPromptAttachments] = useState<Attachment[]>([]);
   const [attachmentError, setAttachmentError] = useState('');
+  const [outputMode, setOutputMode] = useState<OutputMode>('single');
+  const [previewWidth, setPreviewWidth] = useState<PreviewWidth>('desktop');
+  const [previewError, setPreviewError] = useState('');
+  const [versions, setVersions] = useState<Array<{ id: number; html: string; label: string; createdAt: string }>>([]);
+  const [selectedVersionId, setSelectedVersionId] = useState('');
 
   const projectsQuery = useListProjects({ workspaceId });
   const activeProject = projectsQuery.data?.find((project) => project.id === selectedProjectId) ?? null;
@@ -310,7 +334,39 @@ export default function Home() {
     setPrompt(activeProject?.prompt ?? '');
     setChatInput('');
     setActiveTab('preview');
+    setPreviewError('');
+    setVersions([]);
+    setSelectedVersionId('');
   }, [selectedProjectId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!activeProject) return;
+    let cancelled = false;
+    fetch(`/api/projects/${activeProject.id}/versions?workspaceId=${encodeURIComponent(workspaceId)}`)
+      .then((response) => response.ok ? response.json() : [])
+      .then((data) => { if (!cancelled) setVersions(Array.isArray(data) ? data : []); })
+      .catch(() => { if (!cancelled) setVersions([]); });
+    return () => { cancelled = true; };
+  }, [activeProject?.id, workspaceId]);
+
+  useEffect(() => {
+    const iframe = document.querySelector<HTMLIFrameElement>('[data-testid="iframe-live-preview"]');
+    if (!iframe) return;
+    const widths: Record<PreviewWidth, string> = { desktop: '100%', tablet: '768px', mobile: '390px' };
+    iframe.style.maxWidth = widths[previewWidth];
+    iframe.style.marginInline = previewWidth === 'desktop' ? '0' : 'auto';
+  }, [previewWidth, currentHtml, activeTab]);
+
+  useEffect(() => {
+    const iframe = document.querySelector<HTMLIFrameElement>('[data-testid="iframe-live-preview"]');
+    if (!iframe) return;
+    const reportError = (event: Event) => {
+      const detail = event instanceof ErrorEvent ? event.message : 'Une erreur JavaScript est survenue dans l’aperçu.';
+      setPreviewError(detail || 'Une erreur JavaScript est survenue dans l’aperçu.');
+    };
+    iframe.addEventListener('error', reportError);
+    return () => iframe.removeEventListener('error', reportError);
+  }, [currentHtml, activeTab]);
 
   const invalidateProjects = () => queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey({ workspaceId }) });
 
@@ -399,7 +455,18 @@ export default function Home() {
       const JSZip = (await import('jszip')).default;
       const zip = new JSZip();
       const projectName = (activeProject?.name || projectNameFromPrompt(prompt)).toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48) || 'generated-app';
-      zip.file('index.html', currentHtml);
+      if (outputMode === 'advanced') {
+        const styles = [...currentHtml.matchAll(/<style[^>]*>([\s\S]*?)<\/style>/gi)].map((match) => match[1]).join('\n\n');
+        const scripts = [...currentHtml.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi)].map((match) => match[1]).join('\n\n');
+        const advancedHtml = currentHtml
+          .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '<link rel="stylesheet" href="styles.css">')
+          .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '<script src="script.js"></script>');
+        zip.file('index.html', advancedHtml);
+        zip.file('styles.css', styles || '/* Styles générés */');
+        zip.file('script.js', scripts || '// JavaScript généré');
+      } else {
+        zip.file('index.html', currentHtml);
+      }
       zip.file('README.md', `# ${activeProject?.name || projectName}\n\nApplication générée avec Code Me Generation.\n\n## Brief original\n\n${activeProject?.prompt || prompt}\n`);
       const blob = await zip.generateAsync({ type: 'blob' });
       const url = URL.createObjectURL(blob);
@@ -411,6 +478,33 @@ export default function Home() {
       anchor.remove();
       URL.revokeObjectURL(url);
     } finally { setIsDownloading(false); }
+  };
+
+  const handleRestoreVersion = async () => {
+    if (!activeProject || !selectedVersionId) return;
+    const response = await fetch(`/api/projects/${activeProject.id}/versions/${selectedVersionId}/restore`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workspaceId }),
+    });
+    if (!response.ok) return;
+    const restored = await response.json() as Project;
+    setGeneratedHtml(null);
+    queryClient.setQueryData<Project[]>(getListProjectsQueryKey({ workspaceId }), (previous) => previous?.map((project) => project.id === restored.id ? restored : project));
+    setSelectedVersionId('');
+    setPreviewError('');
+  };
+
+  const handleFixPreview = () => {
+    if (!activeProject || !previewError || isChatPending) return;
+    const message = `La preview affiche cette erreur JavaScript : "${previewError}". Analyse le HTML actuel, corrige la cause sans supprimer les fonctionnalités existantes, puis explique précisément le correctif.`;
+    chatMutation.mutate({ projectId: activeProject.id, data: { workspaceId, message, attachments: promptAttachments } }, {
+      onSuccess: (result) => {
+        setPreviewError('');
+        queryClient.setQueryData<Project[]>(getListProjectsQueryKey({ workspaceId }), (previous) => previous?.map((project) => project.id === result.project.id ? result.project : project));
+        queryClient.setQueryData<ProjectMessage[]>(getListProjectMessagesQueryKey(activeProject.id), (previous) => [...(previous ?? []), result.userMessage, result.assistantMessage]);
+      },
+    });
   };
 
   const statusLabel = isPending ? 'Génération en cours' : isChatPending ? 'Amélioration en cours' : hasResult ? 'Application prête' : activeProject ? 'Projet vide' : 'Créez votre premier projet';
@@ -430,6 +524,33 @@ export default function Home() {
         <AttachmentList attachments={promptAttachments} onRemove={(index) => setPromptAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index))} />
         <span className="text-[10px] text-[hsl(var(--muted-foreground))]">Le contexte sera transmis au générateur et à l’assistant.</span>
         {attachmentError && <span className="text-[10px] text-[hsl(var(--destructive))]">{attachmentError}</span>}
+        <label className="ml-auto inline-flex items-center gap-1.5 text-[10px] text-[hsl(var(--muted-foreground))]">
+          <span>Export</span>
+          <select value={outputMode} onChange={(event) => setOutputMode(event.target.value as OutputMode)} className="rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-1.5 py-1 text-[10px] text-[hsl(var(--foreground))]">
+            <option value="single">HTML seul</option>
+            <option value="advanced">Projet avancé</option>
+          </select>
+        </label>
+        <label className="inline-flex items-center gap-1.5 text-[10px] text-[hsl(var(--muted-foreground))]">
+          <span>Aperçu</span>
+          <select value={previewWidth} onChange={(event) => setPreviewWidth(event.target.value as PreviewWidth)} className="rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-1.5 py-1 text-[10px] text-[hsl(var(--foreground))]">
+            <option value="desktop">Desktop</option>
+            <option value="tablet">Tablette</option>
+            <option value="mobile">Mobile</option>
+          </select>
+        </label>
+        {activeProject && versions.length > 0 && <label className="inline-flex items-center gap-1.5 text-[10px] text-[hsl(var(--muted-foreground))]"><History className="size-3" /><select value={selectedVersionId} onChange={(event) => setSelectedVersionId(event.target.value)} className="max-w-[135px] rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-1.5 py-1 text-[10px] text-[hsl(var(--foreground))]"><option value="">Versions</option>{versions.map((version) => <option key={version.id} value={version.id}>{version.label} · {new Date(version.createdAt).toLocaleDateString('fr-FR')}</option>)}</select><button type="button" onClick={handleRestoreVersion} disabled={!selectedVersionId} className="rounded-md border border-[hsl(var(--primary)/.3)] px-2 py-1 text-[10px] text-[hsl(var(--primary))] disabled:opacity-40">Restaurer</button></label>}
+        {previewError && <div className="flex items-center gap-2 rounded-md border border-[hsl(var(--destructive)/.3)] bg-[hsl(var(--destructive)/.08)] px-2 py-1 text-[10px] text-[hsl(var(--destructive))]"><span className="max-w-[230px] truncate" title={previewError}>Erreur preview : {previewError}</span><button type="button" onClick={handleFixPreview} disabled={!activeProject || isChatPending} className="font-semibold underline">Corriger avec l’IA</button></div>}
+        <div className="flex items-center gap-2">
+          {isAuthenticated ? (
+            <>
+              <span className="hidden text-[10px] text-[hsl(var(--muted-foreground))] sm:inline">{user?.firstName || user?.email || 'Compte connecté'}</span>
+              <button type="button" onClick={logout} className="rounded-md border border-[hsl(var(--border))] px-2.5 py-1.5 text-[10px] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">Se déconnecter</button>
+            </>
+          ) : (
+            <button type="button" onClick={login} className="rounded-md border border-[hsl(var(--primary)/.35)] bg-[hsl(var(--primary)/.08)] px-2.5 py-1.5 text-[10px] font-medium text-[hsl(var(--primary))]">Se connecter pour synchroniser</button>
+          )}
+        </div>
       </div>
 
       <div className="mx-auto grid max-w-[1900px] grid-cols-1 lg:grid-cols-[238px_315px_minmax(0,1fr)_330px]">

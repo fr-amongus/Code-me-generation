@@ -11,7 +11,7 @@ import {
   UpdateProjectParams,
   UpdateProjectResponse,
 } from "@workspace/api-zod";
-import { db, projectsTable } from "@workspace/db";
+import { db, projectsTable, projectVersionsTable } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -59,6 +59,15 @@ router.patch("/projects/:id", async (req, res): Promise<void> => {
     return;
   }
 
+  const [previousProject] = await db
+    .select()
+    .from(projectsTable)
+    .where(and(eq(projectsTable.id, params.data.id), eq(projectsTable.workspaceId, body.data.workspaceId)));
+  if (!previousProject) {
+    res.status(404).json({ error: "Projet introuvable." });
+    return;
+  }
+
   const [project] = await db
     .update(projectsTable)
     .set({
@@ -75,6 +84,9 @@ router.patch("/projects/:id", async (req, res): Promise<void> => {
     return;
   }
 
+  if (previousProject.html && previousProject.html !== project.html) {
+    await db.insert(projectVersionsTable).values({ projectId: project.id, html: previousProject.html, label: "Avant modification" });
+  }
   res.json(UpdateProjectResponse.parse(project));
 });
 

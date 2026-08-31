@@ -75,6 +75,8 @@
     "zod": "catalog:"
   },
   "dependencies": {
+    "@workspace/object-storage-web": "workspace:*",
+    "@workspace/replit-auth-web": "workspace:*",
     "jszip": "^3.10.1"
   }
 }

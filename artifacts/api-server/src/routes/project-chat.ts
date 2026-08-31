@@ -7,7 +7,7 @@ import {
   SendProjectMessageParams,
   SendProjectMessageResponse,
 } from "@workspace/api-zod";
-import { db, projectMessagesTable, projectsTable } from "@workspace/db";
+import { db, projectMessagesTable, projectVersionsTable, projectsTable } from "@workspace/db";
 import { GoogleGenAI } from "@google/genai";
 
 const router: IRouter = Router();
@@ -16,13 +16,16 @@ const CHAT_SYSTEM_PROMPT = `
 You are Code Me, an expert web application builder working inside an existing project.
 Return ONLY one valid JSON object with exactly two string properties:
 {
-  "message": "A concise French explanation of what you changed",
+  "message": "A detailed French explanation with sections: Résumé, Fichiers/zones modifiés, Fonctionnalités ajoutées, Corrections et validation. Mention the important UI, behavior, and accessibility changes without dumping code.",
   "html": "<!doctype html>...complete standalone application...</html>"
 }
 The html property must contain a complete self-contained HTML document with CSS in <style>
 tags and JavaScript in <script> tags. Preserve the existing application's useful features,
 then apply the user's requested change. The application must work offline without external
 dependencies. Never return Markdown fences or text outside the JSON object.
+The message is shown directly to the user, so make it concrete and pedagogical: explain
+what changed, why it changed, and how the user can verify it. Do not claim a feature was
+added if it is not present in the returned HTML.
 `;
 
 type Attachment = { name: string; type: string; content: string };
@@ -186,6 +189,9 @@ router.post("/projects/:projectId/chat", async (req, res): Promise<void> => {
         .insert(projectMessagesTable)
         .values({ projectId: project.id, role: "user", content: storedUserMessage })
         .returning();
+      if (project.html) {
+        await tx.insert(projectVersionsTable).values({ projectId: project.id, html: project.html, label: "Avant modification" });
+      }
       const [updatedProject] = await tx
         .update(projectsTable)
         .set({ html, updatedAt: new Date() })
