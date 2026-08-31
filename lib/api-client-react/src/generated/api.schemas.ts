@@ -137,6 +137,56 @@ export interface ProjectChatResult {
   assistantMessage: ProjectMessage;
 }
 
+export type SecurityFindingSeverity = typeof SecurityFindingSeverity[keyof typeof SecurityFindingSeverity];
+
+
+export const SecurityFindingSeverity = {
+  critical: 'critical',
+  high: 'high',
+  medium: 'medium',
+  low: 'low',
+  info: 'info',
+} as const;
+
+export interface SecurityFinding {
+  id: string;
+  severity: SecurityFindingSeverity;
+  title: string;
+  message: string;
+  line?: number;
+  evidence?: string;
+  remediation: string;
+}
+
+export type SecurityScanResultSummary = {[key: string]: number};
+
+export interface SecurityScanResult {
+  scannedAt: string;
+  score: number;
+  findings: SecurityFinding[];
+  summary: SecurityScanResultSummary;
+}
+
+export interface ShellCommandInput {
+  /**
+     * @minLength 8
+     * @maxLength 128
+     */
+  workspaceId: string;
+  /**
+     * @minLength 1
+     * @maxLength 500
+     */
+  command: string;
+}
+
+export interface ShellCommandResult {
+  command: string;
+  output: string;
+  exitCode: number;
+  allowedCommands: string[];
+}
+
 export type ListProjectsParams = {
 /**
  * @minLength 8

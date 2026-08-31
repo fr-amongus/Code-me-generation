@@ -19,6 +19,7 @@ import {
   Plus,
   RotateCcw,
   Send,
+  ShieldCheck,
   Smartphone,
   Sparkles,
   Tablet,
@@ -46,6 +47,8 @@ type WorkspaceTab = 'preview' | 'code';
 type OutputMode = 'single' | 'advanced';
 type PreviewWidth = 'desktop' | 'tablet' | 'mobile';
 type ConsoleEntry = { level: 'log' | 'warn' | 'error'; message: string; stack?: string; time: string };
+type SecurityFinding = { id: string; severity: 'critical' | 'high' | 'medium' | 'low' | 'info'; title: string; message: string; line?: number; evidence?: string; remediation: string };
+type SecurityReport = { scannedAt: string; score: number; findings: SecurityFinding[]; summary: Record<string, number> };
 
 const starterPrompts = [
   {
@@ -291,6 +294,12 @@ export default function Home() {
   const [previewWidth, setPreviewWidth] = useState<PreviewWidth>('desktop');
   const [previewError, setPreviewError] = useState('');
   const [consoleEntries, setConsoleEntries] = useState<ConsoleEntry[]>([]);
+  const [toolPanel, setToolPanel] = useState<'security' | 'shell' | null>(null);
+  const [securityReport, setSecurityReport] = useState<SecurityReport | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
+  const [shellCommand, setShellCommand] = useState('help');
+  const [shellOutput, setShellOutput] = useState('Sélectionne une commande puis appuie sur Entrée.');
+  const [isShellRunning, setIsShellRunning] = useState(false);
   const [versions, setVersions] = useState<Array<{ id: number; html: string; label: string; createdAt: string }>>([]);
   const [selectedVersionId, setSelectedVersionId] = useState('');
 
@@ -367,6 +376,9 @@ export default function Home() {
     setActiveTab('preview');
     setPreviewError('');
     setConsoleEntries([]);
+    setToolPanel(null);
+    setSecurityReport(null);
+    setShellOutput('Sélectionne une commande puis appuie sur Entrée.');
     setVersions([]);
     setSelectedVersionId('');
   }, [selectedProjectId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -564,8 +576,9 @@ export default function Home() {
   };
 
   const handleFixPreview = () => {
-    if (!activeProject || !previewError || isChatPending) return;
-    const message = `La preview affiche cette erreur JavaScript : "${previewError}". Analyse le HTML actuel, corrige la cause sans supprimer les fonctionnalités existantes, puis explique précisément le correctif.`;
+    if (!activeProject || (!previewError && !error) || isChatPending) return;
+    const detectedError = previewError || getErrorMessage(error);
+    const message = `Une erreur a été détectée dans le projet : "${detectedError}". Analyse le HTML actuel, corrige la cause sans supprimer les fonctionnalités existantes, puis explique précisément le correctif.`;
     chatMutation.mutate({ projectId: activeProject.id, data: { workspaceId, message, attachments: promptAttachments } }, {
       onSuccess: (result) => {
         setPreviewError('');
@@ -573,6 +586,45 @@ export default function Home() {
         queryClient.setQueryData<ProjectMessage[]>(getListProjectMessagesQueryKey(activeProject.id), (previous) => [...(previous ?? []), result.userMessage, result.assistantMessage]);
       },
     });
+  };
+
+  const handleSecurityScan = async () => {
+    if (!activeProject || isScanning) return;
+    setToolPanel('security');
+    setIsScanning(true);
+    try {
+      const response = await fetch(`/api/projects/${activeProject.id}/security-scan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspaceId }),
+      });
+      if (!response.ok) throw new Error('Le scan n’a pas pu être exécuté.');
+      setSecurityReport(await response.json() as SecurityReport);
+    } catch (scanError) {
+      setSecurityReport({ scannedAt: new Date().toISOString(), score: 0, findings: [{ id: 'scan-error', severity: 'high', title: 'Scan indisponible', message: scanError instanceof Error ? scanError.message : 'Erreur inconnue', remediation: 'Réessaie dans quelques instants.' }], summary: { high: 1 } });
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  const handleShellCommand = async (event?: FormEvent<HTMLFormElement>) => {
+    event?.preventDefault();
+    if (!activeProject || !shellCommand.trim() || isShellRunning) return;
+    setToolPanel('shell');
+    setIsShellRunning(true);
+    try {
+      const response = await fetch(`/api/projects/${activeProject.id}/shell`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ workspaceId, command: shellCommand.trim() }),
+      });
+      const result = await response.json() as { output?: string; exitCode?: number };
+      setShellOutput(`${result.output ?? 'Aucune sortie.'}${result.exitCode ? `\n\n[exit ${result.exitCode}]` : ''}`);
+    } catch (shellError) {
+      setShellOutput(shellError instanceof Error ? shellError.message : 'Le terminal est indisponible.');
+    } finally {
+      setIsShellRunning(false);
+    }
   };
 
   const statusLabel = isPending ? 'Génération en cours' : isChatPending ? 'Amélioration en cours' : hasResult ? 'Application prête' : activeProject ? 'Projet vide' : 'Créez votre premier projet';
@@ -608,7 +660,9 @@ export default function Home() {
           </select>
         </label>
         {activeProject && versions.length > 0 && <label className="inline-flex items-center gap-1.5 text-[10px] text-[hsl(var(--muted-foreground))]"><History className="size-3" /><select value={selectedVersionId} onChange={(event) => setSelectedVersionId(event.target.value)} className="max-w-[135px] rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-1.5 py-1 text-[10px] text-[hsl(var(--foreground))]"><option value="">Versions</option>{versions.map((version) => <option key={version.id} value={version.id}>{version.label} · {new Date(version.createdAt).toLocaleDateString('fr-FR')}</option>)}</select><button type="button" onClick={handleRestoreVersion} disabled={!selectedVersionId} className="rounded-md border border-[hsl(var(--primary)/.3)] px-2 py-1 text-[10px] text-[hsl(var(--primary))] disabled:opacity-40">Restaurer</button></label>}
-        {previewError && <div className="flex items-center gap-2 rounded-md border border-[hsl(var(--destructive)/.3)] bg-[hsl(var(--destructive)/.08)] px-2 py-1 text-[10px] text-[hsl(var(--destructive))]"><span className="max-w-[230px] truncate" title={previewError}>Erreur preview : {previewError}</span><button type="button" onClick={handleFixPreview} disabled={!activeProject || isChatPending} className="font-semibold underline">Corriger avec l’IA</button></div>}
+         {(previewError || error) && <div className="flex items-center gap-2 rounded-md border border-[hsl(var(--destructive)/.3)] bg-[hsl(var(--destructive)/.08)] px-2 py-1 text-[10px] text-[hsl(var(--destructive))]"><span className="max-w-[230px] truncate" title={previewError || getErrorMessage(error)}>{previewError ? `Erreur preview : ${previewError}` : getErrorMessage(error)}</span><button type="button" onClick={handleFixPreview} disabled={!activeProject || isChatPending} className="font-semibold underline">Réparer avec l’IA</button></div>}
+         <button type="button" onClick={handleSecurityScan} disabled={!activeProject || isScanning} className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[10px] ${toolPanel === 'security' ? 'border-[hsl(var(--primary)/.45)] bg-[hsl(var(--primary)/.1)] text-[hsl(var(--primary))]' : 'border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'}`}><ShieldCheck className="size-3.5" />{isScanning ? 'Scan...' : 'Scan sécurité'}</button>
+         <button type="button" onClick={() => setToolPanel((panel) => panel === 'shell' ? null : 'shell')} disabled={!activeProject} className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[10px] ${toolPanel === 'shell' ? 'border-[hsl(var(--accent)/.45)] bg-[hsl(var(--accent)/.1)] text-[hsl(var(--accent))]' : 'border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'}`}><TerminalSquare className="size-3.5" />Shell</button>
         <div className="flex items-center gap-2">
           {isAuthenticated ? (
             <>
@@ -620,6 +674,17 @@ export default function Home() {
           )}
         </div>
       </div>
+
+      {toolPanel && <section className="border-b border-[hsl(var(--border)/.65)] bg-[hsl(var(--background)/.55)] px-4 py-3 sm:px-7" data-testid={`panel-tool-${toolPanel}`}>
+        {toolPanel === 'shell' ? <div className="mx-auto max-w-[1900px]">
+          <div className="mb-2 flex items-center justify-between"><span className="inline-flex items-center gap-1.5 font-mono text-[10px] text-[hsl(var(--accent))]"><TerminalSquare className="size-3.5" /> Terminal projet</span><span className="text-[10px] text-[hsl(var(--muted-foreground))]">Mode sécurisé · pas de commande serveur arbitraire</span></div>
+          <form onSubmit={handleShellCommand} className="flex gap-2"><span className="rounded-lg bg-[#090b12] px-3 py-2 font-mono text-[11px] text-[hsl(var(--primary))]">$</span><input value={shellCommand} onChange={(event) => setShellCommand(event.target.value)} list="shell-commands" className="min-w-0 flex-1 rounded-lg border border-[hsl(var(--border))] bg-[#090b12] px-3 py-2 font-mono text-[11px] text-slate-200 outline-none focus:border-[hsl(var(--accent)/.6)]" placeholder="help" /><datalist id="shell-commands">{['help', 'pwd', 'ls', 'cat index.html', 'head index.html', 'tail index.html', 'wc -l index.html', 'versions', 'security scan'].map((command) => <option key={command} value={command} />)}</datalist><button type="submit" disabled={isShellRunning} className="rounded-lg bg-[hsl(var(--accent))] px-3 py-2 text-[10px] font-semibold text-[hsl(var(--accent-foreground))] disabled:opacity-50">{isShellRunning ? '...' : 'Exécuter'}</button></form>
+          <pre className="mt-2 max-h-52 overflow-auto rounded-lg border border-[hsl(var(--border)/.7)] bg-[#090b12] p-3 font-mono text-[10px] leading-5 text-slate-300 whitespace-pre-wrap">{shellOutput}</pre>
+        </div> : <div className="mx-auto max-w-[1900px]">
+          <div className="mb-2 flex items-center justify-between"><span className="inline-flex items-center gap-1.5 font-mono text-[10px] text-[hsl(var(--primary))]"><ShieldCheck className="size-3.5" /> Scan sécurité du projet</span>{securityReport && <span className={`font-mono text-[10px] ${securityReport.score >= 80 ? 'text-[hsl(var(--primary))]' : 'text-amber-300'}`}>Score {securityReport.score}/100 · {securityReport.findings.length} constat(s)</span>}</div>
+          {!securityReport ? <p className="text-[11px] text-[hsl(var(--muted-foreground))]">Analyse le HTML, le JavaScript et les ressources externes de ce projet.</p> : <div className="space-y-2">{securityReport.findings.length === 0 && <p className="text-[11px] text-[hsl(var(--primary))]">Aucun risque détecté dans les règles analysées.</p>}{securityReport.findings.map((finding) => <details key={finding.id} className="rounded-lg border border-[hsl(var(--border)/.7)] bg-[hsl(var(--card)/.45)] px-3 py-2"><summary className="cursor-pointer list-none text-[11px]"><span className={`mr-2 rounded px-1.5 py-0.5 text-[9px] uppercase ${finding.severity === 'critical' || finding.severity === 'high' ? 'bg-red-400/15 text-red-300' : finding.severity === 'medium' ? 'bg-amber-400/15 text-amber-200' : 'bg-slate-400/15 text-slate-300'}`}>{finding.severity}</span>{finding.title}{finding.line ? ` · ligne ${finding.line}` : ''}</summary><p className="mt-2 text-[10px] leading-5 text-[hsl(var(--muted-foreground))]">{finding.message}</p><p className="mt-1 text-[10px] leading-5 text-[hsl(var(--primary))]">Correction : {finding.remediation}</p>{finding.evidence && <code className="mt-1 block truncate text-[9px] text-slate-400">{finding.evidence}</code>}</details>)}</div>}
+        </div>}
+      </section>}
 
       {consoleEntries.length > 0 && <section className="border-b border-[hsl(var(--border)/.65)] bg-[#090b12] px-4 py-2.5 font-mono text-[10px] sm:px-7" data-testid="panel-preview-console">
         <div className="mb-2 flex items-center justify-between text-[hsl(var(--muted-foreground))]"><span className="inline-flex items-center gap-1.5"><TerminalSquare className="size-3.5 text-[hsl(var(--primary))]" /> Console preview <span className="rounded bg-[hsl(var(--secondary))] px-1.5 py-0.5">{consoleEntries.length}</span></span><button type="button" onClick={() => { setConsoleEntries([]); setPreviewError(''); }} className="hover:text-[hsl(var(--foreground))]">Effacer</button></div>

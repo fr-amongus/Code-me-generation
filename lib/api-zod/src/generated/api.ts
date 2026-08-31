@@ -253,3 +253,68 @@ export const SendProjectMessageResponse = zod.object({
 })
 
 
+/**
+ * @summary Scan a generated project for common security risks
+ */
+
+
+
+export const ScanProjectSecurityParams = zod.object({
+  "projectId": zod.coerce.number().min(1)
+})
+
+export const scanProjectSecurityBodyWorkspaceIdMin = 8;
+export const scanProjectSecurityBodyWorkspaceIdMax = 128;
+
+
+
+export const ScanProjectSecurityBody = zod.object({
+  "workspaceId": zod.string().min(scanProjectSecurityBodyWorkspaceIdMin).max(scanProjectSecurityBodyWorkspaceIdMax)
+})
+
+export const ScanProjectSecurityResponse = zod.object({
+  "scannedAt": zod.coerce.date(),
+  "score": zod.number(),
+  "findings": zod.array(zod.object({
+  "id": zod.string(),
+  "severity": zod.enum(['critical', 'high', 'medium', 'low', 'info']),
+  "title": zod.string(),
+  "message": zod.string(),
+  "line": zod.number().optional(),
+  "evidence": zod.string().optional(),
+  "remediation": zod.string()
+})),
+  "summary": zod.record(zod.string(), zod.number())
+})
+
+
+/**
+ * @summary Run a safe project workspace command
+ */
+
+
+
+export const RunProjectShellParams = zod.object({
+  "projectId": zod.coerce.number().min(1)
+})
+
+export const runProjectShellBodyWorkspaceIdMin = 8;
+export const runProjectShellBodyWorkspaceIdMax = 128;
+
+export const runProjectShellBodyCommandMax = 500;
+
+
+
+export const RunProjectShellBody = zod.object({
+  "workspaceId": zod.string().min(runProjectShellBodyWorkspaceIdMin).max(runProjectShellBodyWorkspaceIdMax),
+  "command": zod.string().min(1).max(runProjectShellBodyCommandMax)
+})
+
+export const RunProjectShellResponse = zod.object({
+  "command": zod.string(),
+  "output": zod.string(),
+  "exitCode": zod.number(),
+  "allowedCommands": zod.array(zod.string())
+})
+
+

@@ -7,6 +7,7 @@ import authRouter from "./auth";
 import storageRouter from "./storage";
 import projectVersionsRouter from "./project-versions";
 import projectAttachmentsRouter from "./project-attachments";
+import projectToolsRouter from "./project-tools";
 
 const router: IRouter = Router();
 
@@ -18,5 +19,6 @@ router.use(authRouter);
 router.use(storageRouter);
 router.use(projectVersionsRouter);
 router.use(projectAttachmentsRouter);
+router.use(projectToolsRouter);
 
 export default router;

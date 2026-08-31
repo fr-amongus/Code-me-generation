@@ -31,7 +31,10 @@ import type {
   ProjectInput,
   ProjectMessage,
   ProjectUpdate,
-  ProjectWorkspaceInput
+  ProjectWorkspaceInput,
+  SecurityScanResult,
+  ShellCommandInput,
+  ShellCommandResult
 } from './api.schemas';
 
 import { customFetch } from '../custom-fetch';
@@ -702,5 +705,167 @@ export const useSendProjectMessage = <TError = ErrorType<ApiError>,
         TContext
       > => {
       return useMutation(getSendProjectMessageMutationOptions(options));
+    }
+
+export const getScanProjectSecurityUrl = (projectId: number,) => {
+
+
+
+
+  return `/api/projects/${projectId}/security-scan`
+}
+
+/**
+ * @summary Scan a generated project for common security risks
+ */
+export const scanProjectSecurity = async (projectId: number,
+    projectWorkspaceInput: ProjectWorkspaceInput, options?: Parameters<typeof customFetch>[1]): Promise<SecurityScanResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<SecurityScanResult>(getScanProjectSecurityUrl(projectId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(projectWorkspaceInput)
+  }
+);}
+
+
+
+
+
+export const getScanProjectSecurityMutationKey = () => ['scanProjectSecurity'] as const;
+
+export const getScanProjectSecurityMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof scanProjectSecurity>>, TError,ScanProjectSecurityMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof scanProjectSecurity>>, TError,ScanProjectSecurityMutationVariables, TContext> => {
+
+const mutationKey = getScanProjectSecurityMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof scanProjectSecurity>>, ScanProjectSecurityMutationVariables> = (props) => {
+          const {projectId,data} = props ?? {};
+
+          return  scanProjectSecurity(projectId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ScanProjectSecurityMutationResult = NonNullable<Awaited<ReturnType<typeof scanProjectSecurity>>>
+    export type ScanProjectSecurityMutationBody = BodyType<ProjectWorkspaceInput>
+    export type ScanProjectSecurityMutationError = ErrorType<ApiError>
+    export type ScanProjectSecurityMutationVariables = {projectId: number;data: BodyType<ProjectWorkspaceInput>}
+
+    /**
+ * @summary Scan a generated project for common security risks
+ */
+export const useScanProjectSecurity = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof scanProjectSecurity>>, TError,ScanProjectSecurityMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof scanProjectSecurity>>,
+        TError,
+        ScanProjectSecurityMutationVariables,
+        TContext
+      > => {
+      return useMutation(getScanProjectSecurityMutationOptions(options));
+    }
+
+export const getRunProjectShellUrl = (projectId: number,) => {
+
+
+
+
+  return `/api/projects/${projectId}/shell`
+}
+
+/**
+ * @summary Run a safe project workspace command
+ */
+export const runProjectShell = async (projectId: number,
+    shellCommandInput: ShellCommandInput, options?: Parameters<typeof customFetch>[1]): Promise<ShellCommandResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<ShellCommandResult>(getRunProjectShellUrl(projectId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(shellCommandInput)
+  }
+);}
+
+
+
+
+
+export const getRunProjectShellMutationKey = () => ['runProjectShell'] as const;
+
+export const getRunProjectShellMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runProjectShell>>, TError,RunProjectShellMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof runProjectShell>>, TError,RunProjectShellMutationVariables, TContext> => {
+
+const mutationKey = getRunProjectShellMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof runProjectShell>>, RunProjectShellMutationVariables> = (props) => {
+          const {projectId,data} = props ?? {};
+
+          return  runProjectShell(projectId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RunProjectShellMutationResult = NonNullable<Awaited<ReturnType<typeof runProjectShell>>>
+    export type RunProjectShellMutationBody = BodyType<ShellCommandInput>
+    export type RunProjectShellMutationError = ErrorType<ApiError>
+    export type RunProjectShellMutationVariables = {projectId: number;data: BodyType<ShellCommandInput>}
+
+    /**
+ * @summary Run a safe project workspace command
+ */
+export const useRunProjectShell = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof runProjectShell>>, TError,RunProjectShellMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof runProjectShell>>,
+        TError,
+        RunProjectShellMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRunProjectShellMutationOptions(options));
     }
 

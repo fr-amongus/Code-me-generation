@@ -269,6 +269,74 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /projects/{projectId}/security-scan:
+    post:
+      operationId: scanProjectSecurity
+      tags: [projects]
+      summary: Scan a generated project for common security risks
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: number
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectWorkspaceInput"
+      responses:
+        "200":
+          description: Security scan report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SecurityScanResult"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /projects/{projectId}/shell:
+    post:
+      operationId: runProjectShell
+      tags: [projects]
+      summary: Run a safe project workspace command
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: number
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShellCommandInput"
+      responses:
+        "200":
+          description: Shell command output
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShellCommandResult"
+        "400":
+          description: Unsupported command
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   schemas:
     HealthStatus:
@@ -454,4 +522,66 @@ components:
         - project
         - userMessage
         - assistantMessage
+    SecurityFinding:
+      type: object
+      properties:
+        id:
+          type: string
+        severity:
+          type: string
+          enum: [critical, high, medium, low, info]
+        title:
+          type: string
+        message:
+          type: string
+        line:
+          type: number
+        evidence:
+          type: string
+        remediation:
+          type: string
+      required: [id, severity, title, message, remediation]
+    SecurityScanResult:
+      type: object
+      properties:
+        scannedAt:
+          type: string
+          format: date-time
+        score:
+          type: number
+        findings:
+          type: array
+          items:
+            $ref: "#/components/schemas/SecurityFinding"
+        summary:
+          type: object
+          additionalProperties:
+            type: number
+      required: [scannedAt, score, findings, summary]
+    ShellCommandInput:
+      type: object
+      properties:
+        workspaceId:
+          type: string
+          minLength: 8
+          maxLength: 128
+        command:
+          type: string
+          minLength: 1
+          maxLength: 500
+      required: [workspaceId, command]
+    ShellCommandResult:
+      type: object
+      properties:
+        command:
+          type: string
+        output:
+          type: string
+        exitCode:
+          type: number
+        allowedCommands:
+          type: array
+          items:
+            type: string
+      required: [command, output, exitCode, allowedCommands]
 
