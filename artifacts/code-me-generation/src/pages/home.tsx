@@ -26,6 +26,8 @@ import {
   TerminalSquare,
   Trash2,
   WandSparkles,
+  Wrench,
+  RefreshCw,
 } from 'lucide-react';
 import {
   getListProjectMessagesQueryKey,
@@ -42,10 +44,12 @@ import {
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@workspace/replit-auth-web';
+import ProjectToolbox, { type ToolboxAiAction } from '@/components/project-toolbox';
 
 type WorkspaceTab = 'preview' | 'code';
 type OutputMode = 'single' | 'advanced';
 type PreviewWidth = 'desktop' | 'tablet' | 'mobile';
+type PreviewOrientation = 'portrait' | 'landscape';
 type ConsoleEntry = { level: 'log' | 'warn' | 'error'; message: string; stack?: string; time: string };
 type SecurityFinding = { id: string; severity: 'critical' | 'high' | 'medium' | 'low' | 'info'; title: string; message: string; line?: number; evidence?: string; remediation: string };
 type SecurityReport = { scannedAt: string; score: number; findings: SecurityFinding[]; summary: Record<string, number> };
@@ -292,9 +296,14 @@ export default function Home() {
   const [attachmentError, setAttachmentError] = useState('');
   const [outputMode, setOutputMode] = useState<OutputMode>('single');
   const [previewWidth, setPreviewWidth] = useState<PreviewWidth>('desktop');
+  const [previewOrientation, setPreviewOrientation] = useState<PreviewOrientation>('portrait');
+  const [previewScale, setPreviewScale] = useState(100);
+  const [previewNonce, setPreviewNonce] = useState(0);
   const [previewError, setPreviewError] = useState('');
   const [consoleEntries, setConsoleEntries] = useState<ConsoleEntry[]>([]);
-  const [toolPanel, setToolPanel] = useState<'security' | 'shell' | null>(null);
+  const [toolPanel, setToolPanel] = useState<'security' | 'shell' | 'toolbox' | null>(null);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [commandQuery, setCommandQuery] = useState('');
   const [securityReport, setSecurityReport] = useState<SecurityReport | null>(null);
   const [isFixingSecurity, setIsFixingSecurity] = useState(false);
   const [securityFixMessage, setSecurityFixMessage] = useState('');
@@ -401,6 +410,22 @@ export default function Home() {
   }, [isAuthenticated]);
 
   useEffect(() => {
+    const handleShortcut = (event: globalThis.KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setCommandPaletteOpen(true);
+        setCommandQuery('');
+      }
+      if (event.key === 'Escape') {
+        setCommandPaletteOpen(false);
+        setCommandQuery('');
+      }
+    };
+    window.addEventListener('keydown', handleShortcut);
+    return () => window.removeEventListener('keydown', handleShortcut);
+  }, []);
+
+  useEffect(() => {
     if (!activeProject) return;
     let cancelled = false;
     fetch(`/api/projects/${activeProject.id}/versions?workspaceId=${encodeURIComponent(workspaceId)}`)
@@ -432,10 +457,16 @@ export default function Home() {
     if (currentHtml && iframe.srcdoc !== instrumentPreviewHtml(currentHtml)) {
       iframe.srcdoc = instrumentPreviewHtml(currentHtml);
     }
-    const widths: Record<PreviewWidth, string> = { desktop: '100%', tablet: '768px', mobile: '390px' };
+    const widths: Record<PreviewWidth, string> = previewOrientation === 'portrait'
+      ? { desktop: '100%', tablet: '768px', mobile: '390px' }
+      : { desktop: '100%', tablet: '1024px', mobile: '844px' };
     iframe.style.maxWidth = widths[previewWidth];
     iframe.style.marginInline = previewWidth === 'desktop' ? '0' : 'auto';
-  }, [previewWidth, currentHtml, activeTab]);
+    const scale = previewScale / 100;
+    iframe.style.transform = scale === 1 ? '' : `scale(${scale})`;
+    iframe.style.transformOrigin = 'top center';
+    iframe.style.width = scale === 1 ? '100%' : `${100 / scale}%`;
+  }, [previewWidth, previewOrientation, previewScale, currentHtml, activeTab, previewNonce]);
 
   useEffect(() => {
     const iframe = document.querySelector<HTMLIFrameElement>('[data-testid="iframe-live-preview"]');
@@ -590,9 +621,9 @@ export default function Home() {
     } finally { setIsDownloading(false); }
   };
 
-  const handleRestoreVersion = async () => {
-    if (!activeProject || !selectedVersionId) return;
-    const response = await fetch(`/api/projects/${activeProject.id}/versions/${selectedVersionId}/restore`, {
+  const handleRestoreVersion = async (versionId = selectedVersionId) => {
+    if (!activeProject || !versionId) return;
+    const response = await fetch(`/api/projects/${activeProject.id}/versions/${versionId}/restore`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ workspaceId }),
@@ -603,6 +634,30 @@ export default function Home() {
     queryClient.setQueryData<Project[]>(getListProjectsQueryKey({ workspaceId }), (previous) => previous?.map((project) => project.id === restored.id ? restored : project));
     setSelectedVersionId('');
     setPreviewError('');
+  };
+
+  const handleToolboxAiAction = (action: ToolboxAiAction) => {
+    if (!activeProject || isChatPending) return;
+    if (!isAuthenticated) {
+      login();
+      return;
+    }
+    const prompts: Record<ToolboxAiAction, string> = {
+      explain: 'Explique précisément la structure actuelle de cette application, les zones importantes du HTML, du CSS et du JavaScript, ainsi que les choix d’accessibilité. Ne modifie pas le projet : donne uniquement une explication pédagogique.',
+      refactor: 'Refactorise le projet actuel sans changer son apparence ni ses fonctionnalités. Sépare les responsabilités, réduis les répétitions et améliore la lisibilité. Vérifie que le résultat reste autonome et fonctionnel.',
+      tests: 'Ajoute une stratégie de tests ciblés pour les interactions importantes du projet. Si le projet est autonome, ajoute des contrôles de test non destructifs et explique précisément ce qui est couvert.',
+      accessibility: 'Améliore l’accessibilité du projet : structure sémantique, labels, navigation clavier, attributs ARIA utiles, textes alternatifs et responsive. Ne supprime aucune fonctionnalité.',
+      performance: 'Optimise les performances du projet sans modifier son expérience visuelle : réduis les répétitions, limite les coûts JavaScript, optimise le rendu et conserve un HTML autonome.',
+    };
+    chatMutation.mutate({
+      projectId: activeProject.id,
+      data: { workspaceId, message: prompts[action], attachments: promptAttachments },
+    }, {
+      onSuccess: (result) => {
+        queryClient.setQueryData<Project[]>(getListProjectsQueryKey({ workspaceId }), (previous) => previous?.map((project) => project.id === result.project.id ? result.project : project));
+        queryClient.setQueryData<ProjectMessage[]>(getListProjectMessagesQueryKey(activeProject.id), (previous) => [...(previous ?? []), result.userMessage, result.assistantMessage]);
+      },
+    });
   };
 
   const handleFixPreview = () => {
