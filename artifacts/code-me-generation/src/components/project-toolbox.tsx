@@ -548,7 +548,7 @@ export default function ProjectToolbox({
                   const preview = isImage && (attachment.content.startsWith('data:') || attachment.objectPath);
                   return (
                     <div key={`${attachment.name}-${index}`} className="overflow-hidden rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background)/.3)]" data-testid={`asset-card-${index}`}>
-                      {preview && <div className="h-24 overflow-hidden border-b border-[hsl(var(--border))] bg-[hsl(var(--secondary)/.4)]"><img src={attachment.objectPath || attachment.content} alt={`Aperçu de ${attachment.name}`} className="h-full w-full object-cover" data-testid={`img-asset-preview-${index}`} /></div>}
+                      {preview && <div className="h-24 overflow-hidden border-b border-[hsl(var(--border))] bg-[hsl(var(--secondary)/.4)]"><img src={attachment.objectPath ? `/api/storage${attachment.objectPath}` : attachment.content} alt={`Aperçu de ${attachment.name}`} className="h-full w-full object-cover" data-testid={`img-asset-preview-${index}`} /></div>}
                       <div className="flex items-center gap-3 px-3 py-3">
                         <div className="grid size-8 shrink-0 place-items-center rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--secondary)/.55)] text-[hsl(var(--accent))]"><Icon className="size-4" strokeWidth={1.7} /></div>
                         <div className="min-w-0 flex-1">
