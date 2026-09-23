@@ -1,3 +1,4 @@
 - [Gemini model availability](gemini-model-availability.md) — new user keys may reject older Gemini IDs; verify the live model before debugging prompts.
 - [Gemini chat output handling](gemini-chat-output.md) — tolerate raw or wrapped HTML when structured Gemini output drifts.
 - [Groq routing](groq-routing.md) — keep Groq requests small and retain model/provider fallbacks because model access and TPM limits vary by key.
+- [AI rate-limit cooldown](ai-rate-limit-cooldown.md) — surface Retry-After and lock every AI action briefly after provider throttling.

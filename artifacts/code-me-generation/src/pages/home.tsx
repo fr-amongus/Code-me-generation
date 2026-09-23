@@ -109,6 +109,26 @@ function getErrorMessage(error: unknown) {
   return 'Cette action n’a pas abouti. Vérifiez votre demande puis réessayez.';
 }
 
+function getAiCooldownSeconds(error: unknown) {
+  const message = getErrorMessage(error);
+  const status = typeof error === 'object' && error !== null && 'status' in error
+    ? Number((error as { status?: unknown }).status)
+    : 0;
+  const headers = typeof error === 'object' && error !== null && 'headers' in error
+    ? (error as { headers?: { get?: (name: string) => string | null } }).headers
+    : undefined;
+  const retryAfterHeader = headers?.get?.('Retry-After');
+  const retryMatch = message.match(/(?:dans|in|after|retry(?:\s+in)?)\s+(\d+(?:[.,]\d+)?)\s*(?:s|sec|second)/i);
+  const retrySeconds = retryAfterHeader
+    ? Math.ceil(Number(retryAfterHeader))
+    : retryMatch
+      ? Math.ceil(Number(retryMatch[1].replace(',', '.')))
+      : 0;
+  const looksTemporary = status === 429 || status === 503 || /quota|rate.?limit|too many requests|resource exhausted|momentanément limité|indisponible|high demand/i.test(message);
+  if (!looksTemporary) return 0;
+  return Math.min(90, Math.max(10, retrySeconds || (status === 503 ? 20 : 15)));
+}
+
 function projectNameFromPrompt(value: string) {
   const name = value.split(/[.!?]/)[0].replace(/\s+/g, ' ').trim();
   return (name.slice(0, 56) || 'Nouveau projet').replace(/[,:;]+$/, '');
@@ -308,6 +328,7 @@ export default function Home() {
   const [isFixingSecurity, setIsFixingSecurity] = useState(false);
   const [securityFixMessage, setSecurityFixMessage] = useState('');
   const [isScanning, setIsScanning] = useState(false);
+  const [aiCooldownRemaining, setAiCooldownRemaining] = useState(0);
   const [shellCommand, setShellCommand] = useState('help');
   const [shellOutput, setShellOutput] = useState('Sélectionne une commande puis appuie sur Entrée.');
   const [isShellRunning, setIsShellRunning] = useState(false);
@@ -335,6 +356,21 @@ export default function Home() {
   const hasResult = Boolean(currentHtml);
   const codeStats = useMemo(() => currentHtml ? { lines: currentHtml.split('\n').length, chars: currentHtml.length } : { lines: 0, chars: 0 }, [currentHtml]);
   const messages = messagesQuery.data ?? [];
+  const aiCooldownActive = aiCooldownRemaining > 0;
+
+  const armAiCooldown = (aiError: unknown) => {
+    const seconds = getAiCooldownSeconds(aiError);
+    if (!seconds) return;
+    setAiCooldownRemaining((current) => Math.max(current, seconds));
+  };
+
+  useEffect(() => {
+    if (!aiCooldownActive) return;
+    const timer = window.setInterval(() => {
+      setAiCooldownRemaining((current) => Math.max(0, current - 1));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [aiCooldownActive]);
 
   const handleAttachmentSelection = async (event: ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []);
@@ -501,7 +537,7 @@ export default function Home() {
   const handleGenerate = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmedPrompt = prompt.trim();
-    if (trimmedPrompt.length < 3 || isPending) return;
+    if (trimmedPrompt.length < 3 || isPending || aiCooldownActive) return;
     if (!isAuthenticated) {
       try { window.sessionStorage.setItem('code-me-pending-prompt', trimmedPrompt); } catch { /* continue to login */ }
       login();
@@ -523,6 +559,7 @@ export default function Home() {
           });
         }
       },
+      onError: armAiCooldown,
     });
   };
 
@@ -569,7 +606,7 @@ export default function Home() {
       login();
       return;
     }
-    if (!activeProject || !message || isChatPending) return;
+    if (!activeProject || !message || isChatPending || aiCooldownActive) return;
     chatMutation.mutate({ projectId: activeProject.id, data: { workspaceId, message, attachments: promptAttachments } }, {
       onSuccess: (result) => {
         setChatInput('');
@@ -577,6 +614,7 @@ export default function Home() {
         queryClient.setQueryData<Project[]>(getListProjectsQueryKey({ workspaceId }), (previous) => previous?.map((project) => project.id === result.project.id ? result.project : project));
         queryClient.setQueryData<ProjectMessage[]>(getListProjectMessagesQueryKey(activeProject.id), (previous) => [...(previous ?? []), result.userMessage, result.assistantMessage]);
       },
+      onError: armAiCooldown,
     });
   };
 
@@ -638,7 +676,7 @@ export default function Home() {
   };
 
   const handleToolboxAiAction = (action: ToolboxAiAction) => {
-    if (!activeProject || isChatPending) return;
+    if (!activeProject || isChatPending || aiCooldownActive) return;
     if (!isAuthenticated) {
       login();
       return;
@@ -658,6 +696,7 @@ export default function Home() {
         queryClient.setQueryData<Project[]>(getListProjectsQueryKey({ workspaceId }), (previous) => previous?.map((project) => project.id === result.project.id ? result.project : project));
         queryClient.setQueryData<ProjectMessage[]>(getListProjectMessagesQueryKey(activeProject.id), (previous) => [...(previous ?? []), result.userMessage, result.assistantMessage]);
       },
+      onError: armAiCooldown,
     });
   };
 
@@ -666,7 +705,7 @@ export default function Home() {
       login();
       return;
     }
-    if (!activeProject || (!previewError && !error) || isChatPending) return;
+    if (!activeProject || (!previewError && !error) || isChatPending || aiCooldownActive) return;
     const detectedError = previewError || getErrorMessage(error);
     const message = `Une erreur a été détectée dans le projet : "${detectedError}". Analyse le HTML actuel, corrige la cause sans supprimer les fonctionnalités existantes, puis explique précisément le correctif.`;
     chatMutation.mutate({ projectId: activeProject.id, data: { workspaceId, message, attachments: promptAttachments } }, {
@@ -675,11 +714,12 @@ export default function Home() {
         queryClient.setQueryData<Project[]>(getListProjectsQueryKey({ workspaceId }), (previous) => previous?.map((project) => project.id === result.project.id ? result.project : project));
         queryClient.setQueryData<ProjectMessage[]>(getListProjectMessagesQueryKey(activeProject.id), (previous) => [...(previous ?? []), result.userMessage, result.assistantMessage]);
       },
+      onError: armAiCooldown,
     });
   };
 
   const handleFixSecurity = () => {
-    if (!securityReport?.findings.length || isFixingSecurity || isChatPending) return;
+    if (!securityReport?.findings.length || isFixingSecurity || isChatPending || aiCooldownActive) return;
     if (!isAuthenticated) {
       login();
       return;
@@ -703,6 +743,7 @@ export default function Home() {
         queryClient.setQueryData<Project[]>(getListProjectsQueryKey({ workspaceId }), (previous) => previous?.map((project) => project.id === result.project.id ? result.project : project));
         queryClient.setQueryData<ProjectMessage[]>(getListProjectMessagesQueryKey(result.project.id), (previous) => [...(previous ?? []), result.userMessage, result.assistantMessage]);
       },
+      onError: armAiCooldown,
       onSettled: () => setIsFixingSecurity(false),
     });
   };
@@ -747,11 +788,12 @@ export default function Home() {
   };
 
   const statusLabel = isPending ? 'Génération en cours' : isChatPending ? 'Amélioration en cours' : hasResult ? 'Application prête' : activeProject ? 'Projet vide' : 'Créez votre premier projet';
+  const aiCooldownLabel = `IA temporairement limitée · ${aiCooldownRemaining}s`;
   const commandItems: Array<{ id: string; label: string; detail: string; action: () => void; disabled?: boolean }> = [
     { id: 'toolbox', label: 'Ouvrir la boîte à outils', detail: 'Fichiers, versions, qualité, ressources et actions IA', action: () => { setToolPanel('toolbox'); setCommandPaletteOpen(false); }, disabled: !activeProject },
-    { id: 'explain', label: 'Expliquer le code', detail: 'Demander une lecture pédagogique à l’assistant', action: () => { setToolPanel('toolbox'); handleToolboxAiAction('explain'); setCommandPaletteOpen(false); }, disabled: !activeProject || isChatPending },
+    { id: 'explain', label: 'Expliquer le code', detail: 'Demander une lecture pédagogique à l’assistant', action: () => { setToolPanel('toolbox'); handleToolboxAiAction('explain'); setCommandPaletteOpen(false); }, disabled: !activeProject || isChatPending || aiCooldownActive },
     { id: 'quality', label: 'Analyser la qualité', detail: 'Ouvrir les contrôles locaux accessibilité et performance', action: () => { setToolPanel('toolbox'); setCommandPaletteOpen(false); }, disabled: !activeProject },
-    { id: 'security', label: 'Lancer le scan sécurité', detail: 'Analyser le projet avec les règles locales et Groq 2', action: () => { handleSecurityScan(); setCommandPaletteOpen(false); }, disabled: !activeProject || isScanning },
+    { id: 'security', label: 'Lancer le scan sécurité', detail: 'Analyser le projet avec les règles locales et Groq 2', action: () => { handleSecurityScan(); setCommandPaletteOpen(false); }, disabled: !activeProject || isScanning || aiCooldownActive },
     { id: 'shell', label: 'Ouvrir le terminal sécurisé', detail: 'Consulter les fichiers et les versions du projet', action: () => { setToolPanel('shell'); setCommandPaletteOpen(false); }, disabled: !activeProject },
     { id: 'refresh', label: 'Actualiser la preview', detail: 'Recharger l’iframe isolée sans modifier le code', action: () => { setPreviewNonce((value) => value + 1); setCommandPaletteOpen(false); }, disabled: !hasResult },
   ].filter((item) => !commandQuery.trim() || `${item.label} ${item.detail}`.toLowerCase().includes(commandQuery.toLowerCase()));
@@ -804,9 +846,9 @@ export default function Home() {
         </label>
         <button type="button" onClick={() => setPreviewNonce((value) => value + 1)} disabled={!hasResult} className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(var(--border))] px-2.5 py-1.5 text-[10px] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/.35)] hover:text-[hsl(var(--foreground))] disabled:opacity-40" data-testid="button-refresh-preview"><RefreshCw className="size-3.5" />Actualiser</button>
         {activeProject && versions.length > 0 && <label className="inline-flex items-center gap-1.5 text-[10px] text-[hsl(var(--muted-foreground))]"><History className="size-3" /><select value={selectedVersionId} onChange={(event) => setSelectedVersionId(event.target.value)} className="max-w-[135px] rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-1.5 py-1 text-[10px] text-[hsl(var(--foreground))]"><option value="">Versions</option>{versions.map((version) => <option key={version.id} value={version.id}>{version.label} · {new Date(version.createdAt).toLocaleDateString('fr-FR')}</option>)}</select><button type="button" onClick={() => handleRestoreVersion(selectedVersionId)} disabled={!selectedVersionId} className="rounded-md border border-[hsl(var(--primary)/.3)] px-2 py-1 text-[10px] text-[hsl(var(--primary))] disabled:opacity-40">Restaurer</button></label>}
-         {(previewError || error) && <div className="flex items-center gap-2 rounded-md border border-[hsl(var(--destructive)/.3)] bg-[hsl(var(--destructive)/.08)] px-2 py-1 text-[10px] text-[hsl(var(--destructive))]"><span className="max-w-[230px] truncate" title={previewError || getErrorMessage(error)}>{previewError ? `Erreur preview : ${previewError}` : getErrorMessage(error)}</span><button type="button" onClick={handleFixPreview} disabled={!activeProject || isChatPending} className="font-semibold underline">Réparer avec l’IA</button></div>}
+         {(previewError || error) && <div className="flex items-center gap-2 rounded-md border border-[hsl(var(--destructive)/.3)] bg-[hsl(var(--destructive)/.08)] px-2 py-1 text-[10px] text-[hsl(var(--destructive))]"><span className="max-w-[230px] truncate" title={previewError || getErrorMessage(error)}>{previewError ? `Erreur preview : ${previewError}` : getErrorMessage(error)}</span><button type="button" onClick={handleFixPreview} disabled={!activeProject || isChatPending || aiCooldownActive} className="font-semibold underline disabled:cursor-not-allowed disabled:no-underline disabled:opacity-60">{aiCooldownActive ? aiCooldownLabel : isChatPending ? 'Réparation en cours...' : 'Réparer avec l’IA'}</button></div>}
          <button type="button" onClick={() => setToolPanel((panel) => panel === 'toolbox' ? null : 'toolbox')} disabled={!activeProject} className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[10px] ${toolPanel === 'toolbox' ? 'border-[hsl(var(--primary)/.45)] bg-[hsl(var(--primary)/.1)] text-[hsl(var(--primary))]' : 'border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'}`} data-testid="button-open-toolbox"><Wrench className="size-3.5" />Outils</button>
-         <button type="button" onClick={handleSecurityScan} disabled={!activeProject || isScanning} className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[10px] ${toolPanel === 'security' ? 'border-[hsl(var(--primary)/.45)] bg-[hsl(var(--primary)/.1)] text-[hsl(var(--primary))]' : 'border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'}`}><ShieldCheck className="size-3.5" />{isScanning ? 'Scan...' : 'Scan sécurité'}</button>
+         <button type="button" onClick={handleSecurityScan} disabled={!activeProject || isScanning || aiCooldownActive} className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[10px] ${toolPanel === 'security' ? 'border-[hsl(var(--primary)/.45)] bg-[hsl(var(--primary)/.1)] text-[hsl(var(--primary))]' : 'border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'} disabled:cursor-not-allowed disabled:opacity-50`}><ShieldCheck className="size-3.5" />{isScanning ? 'Scan...' : aiCooldownActive ? aiCooldownLabel : 'Scan sécurité'}</button>
          <button type="button" onClick={() => setToolPanel((panel) => panel === 'shell' ? null : 'shell')} disabled={!activeProject} className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[10px] ${toolPanel === 'shell' ? 'border-[hsl(var(--accent)/.45)] bg-[hsl(var(--accent)/.1)] text-[hsl(var(--accent))]' : 'border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'}`}><TerminalSquare className="size-3.5" />Shell</button>
          <div className="flex items-center gap-2">
           {isAuthenticated ? (
@@ -837,6 +879,8 @@ export default function Home() {
             onSelectVersion={(versionId) => setSelectedVersionId(String(versionId))}
             onRestoreVersion={handleRestoreVersion}
             onAiAction={handleToolboxAiAction}
+            aiDisabled={aiCooldownActive}
+            aiDisabledLabel={aiCooldownLabel}
             onClose={() => setToolPanel(null)}
           />
         </div> : toolPanel === 'shell' ? <div className="mx-auto max-w-[1900px]">
@@ -863,7 +907,7 @@ export default function Home() {
 
         <aside className="border-b border-[hsl(var(--border)/.8)] bg-[hsl(var(--sidebar)/.42)] p-4 sm:p-6 lg:min-h-[calc(100dvh-68px)] lg:border-b-0 lg:border-r lg:p-6">
           <div className="mb-7 flex items-center justify-between"><div><p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[hsl(var(--primary))]">01 / Brief</p><h2 className="mt-2 text-[20px] font-medium tracking-[-0.04em]">Décrire une app</h2></div><div className="grid size-8 place-items-center rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card)/.6)] text-[hsl(var(--muted-foreground))]"><MessageCircle className="size-4" /></div></div>
-          <form onSubmit={handleGenerate}><label htmlFor="application-prompt" className="mb-2.5 block text-[11px] font-medium text-[hsl(var(--foreground)/.82)]">Votre demande</label><div className={`group relative rounded-xl border bg-[hsl(var(--background)/.55)] transition-colors ${error ? 'border-[hsl(var(--destructive)/.8)]' : 'border-[hsl(var(--border))] focus-within:border-[hsl(var(--primary)/.65)]'}`}><textarea id="application-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="Décris l'application que tu souhaites créer (ex: un convertisseur de devises, une todo-list moderne, un mini-jeu Snake)..." rows={7} maxLength={10000} className="block w-full resize-none bg-transparent px-4 py-3.5 text-[13px] leading-6 text-[hsl(var(--foreground))] outline-none placeholder:text-[hsl(var(--muted-foreground)/.75)]" data-testid="input-application-prompt" /><div className="flex items-center justify-between border-t border-[hsl(var(--border)/.65)] px-3.5 py-2.5"><span className="font-mono text-[10px] text-[hsl(var(--muted-foreground))]" data-testid="text-prompt-character-count">{prompt.length.toLocaleString('fr-FR')} / 10 000</span><span className="inline-flex items-center gap-1.5 font-mono text-[10px] text-[hsl(var(--muted-foreground))]"><Sparkles className="size-3 text-[hsl(var(--accent))]" /> langage naturel</span></div></div>{error && <div className="mt-3 flex items-start gap-2 rounded-lg border border-[hsl(var(--destructive)/.3)] bg-[hsl(var(--destructive)/.08)] px-3 py-2.5 text-[11px] leading-5 text-[hsl(var(--destructive))]" role="alert"><AlertCircle className="mt-0.5 size-3.5 shrink-0" /><span>{getErrorMessage(error)}</span></div>}<button type="submit" disabled={prompt.trim().length < 3 || isPending} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[hsl(var(--primary))] px-4 py-3 text-[12px] font-semibold text-[hsl(var(--primary-foreground))] shadow-[0_10px_25px_hsl(var(--primary)/.12)] transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none" data-testid="button-generate-application">{isPending ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-3.5 fill-current" />}{isPending ? 'Construction en cours...' : activeProject ? 'Regénérer le projet' : 'Générer l’application'}</button></form>
+          <form onSubmit={handleGenerate}><label htmlFor="application-prompt" className="mb-2.5 block text-[11px] font-medium text-[hsl(var(--foreground)/.82)]">Votre demande</label><div className={`group relative rounded-xl border bg-[hsl(var(--background)/.55)] transition-colors ${error ? 'border-[hsl(var(--destructive)/.8)]' : 'border-[hsl(var(--border))] focus-within:border-[hsl(var(--primary)/.65)]'}`}><textarea id="application-prompt" value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="Décris l'application que tu souhaites créer (ex: un convertisseur de devises, une todo-list moderne, un mini-jeu Snake)..." rows={7} maxLength={10000} className="block w-full resize-none bg-transparent px-4 py-3.5 text-[13px] leading-6 text-[hsl(var(--foreground))] outline-none placeholder:text-[hsl(var(--muted-foreground)/.75)]" data-testid="input-application-prompt" /><div className="flex items-center justify-between border-t border-[hsl(var(--border)/.65)] px-3.5 py-2.5"><span className="font-mono text-[10px] text-[hsl(var(--muted-foreground))]" data-testid="text-prompt-character-count">{prompt.length.toLocaleString('fr-FR')} / 10 000</span><span className="inline-flex items-center gap-1.5 font-mono text-[10px] text-[hsl(var(--muted-foreground))]"><Sparkles className="size-3 text-[hsl(var(--accent))]" /> langage naturel</span></div></div>{error && <div className="mt-3 flex items-start gap-2 rounded-lg border border-[hsl(var(--destructive)/.3)] bg-[hsl(var(--destructive)/.08)] px-3 py-2.5 text-[11px] leading-5 text-[hsl(var(--destructive))]" role="alert"><AlertCircle className="mt-0.5 size-3.5 shrink-0" /><span>{getErrorMessage(error)}</span></div>}<button type="submit" disabled={prompt.trim().length < 3 || isPending || aiCooldownActive} className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[hsl(var(--primary))] px-4 py-3 text-[12px] font-semibold text-[hsl(var(--primary-foreground))] shadow-[0_10px_25px_hsl(var(--primary)/.12)] transition-all hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none" data-testid="button-generate-application">{isPending ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-3.5 fill-current" />}{isPending ? 'Construction en cours...' : aiCooldownActive ? aiCooldownLabel : activeProject ? 'Regénérer le projet' : 'Générer l’application'}</button></form>
           <div className="mt-8 rounded-xl border border-[hsl(var(--border)/.75)] bg-[hsl(var(--card)/.45)] p-4"><div className="mb-3 flex items-center gap-2"><div className="grid size-6 place-items-center rounded-md bg-[hsl(var(--accent)/.12)] text-[hsl(var(--accent))]"><Layers3 className="size-3.5" /></div><span className="text-[11px] font-medium">Projet persistant</span></div><p className="text-[11px] leading-5 text-[hsl(var(--muted-foreground))]">Votre brief, votre HTML et chaque échange avec l’assistant restent liés au projet sélectionné.</p></div>
         </aside>
 
@@ -874,7 +918,7 @@ export default function Home() {
 
         <aside className="flex min-h-[560px] flex-col border-t border-[hsl(var(--border)/.8)] bg-[hsl(var(--sidebar)/.48)] p-4 sm:p-6 lg:min-h-[calc(100dvh-68px)] lg:border-l lg:border-t-0 lg:p-5">
           <div className="mb-4 flex items-center justify-between"><div><p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[hsl(var(--accent))]">03 / Assistant</p><h2 className="mt-2 text-[19px] font-medium tracking-[-0.04em]">Améliorer le projet</h2></div><div className="grid size-8 place-items-center rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card)/.6)] text-[hsl(var(--accent))]"><Sparkles className="size-4" /></div></div>
-          {!activeProject ? <div className="flex flex-1 flex-col items-center justify-center px-4 text-center"><MessageCircle className="size-7 text-[hsl(var(--muted-foreground))]" /><p className="mt-3 text-[12px] font-medium">Sélectionnez un projet</p><p className="mt-2 text-[11px] leading-5 text-[hsl(var(--muted-foreground))]">L’assistant pourra ensuite modifier votre application en gardant tout l’historique.</p></div> : <><div className="chat-scroll flex-1 space-y-4 overflow-y-auto pr-1">{messagesQuery.isLoading ? <div className="space-y-3"><div className="h-14 rounded-2xl bg-[hsl(var(--muted)/.4)]" /><div className="ml-auto h-12 w-4/5 rounded-2xl bg-[hsl(var(--muted)/.3)]" /></div> : messages.length ? messages.map((message) => <ChatBubble key={message.id} message={message} />) : <div className="rounded-xl border border-dashed border-[hsl(var(--border))] px-3 py-5 text-center"><Sparkles className="mx-auto size-5 text-[hsl(var(--accent))]" /><p className="mt-2 text-[11px] leading-5 text-[hsl(var(--muted-foreground))]">Demandez une modification, une nouvelle section ou une amélioration visuelle.</p></div>}{isChatPending && <div className="flex items-center gap-2 text-[11px] text-[hsl(var(--muted-foreground))]"><Loader2 className="size-3.5 animate-spin text-[hsl(var(--accent))]" /> Analyse du projet en cours...</div>}</div><form onSubmit={handleSendChat} className="mt-4 border-t border-[hsl(var(--border)/.8)] pt-4"><div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background)/.55)] focus-within:border-[hsl(var(--accent)/.65)]"><textarea value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder="Ex: ajoute un mode sombre et une animation d’entrée..." rows={3} maxLength={10000} disabled={isChatPending} className="block w-full resize-none bg-transparent px-3.5 py-3 text-[12px] leading-5 text-[hsl(var(--foreground))] outline-none placeholder:text-[hsl(var(--muted-foreground)/.7)]" data-testid="input-project-chat" /><div className="flex items-center justify-between border-t border-[hsl(var(--border)/.65)] px-3 py-2"><span className="text-[10px] text-[hsl(var(--muted-foreground))]">L’historique est sauvegardé</span><button type="submit" disabled={!chatInput.trim() || isChatPending} className="inline-flex items-center gap-1.5 rounded-lg bg-[hsl(var(--accent))] px-2.5 py-1.5 text-[10px] font-semibold text-[hsl(var(--accent-foreground))] disabled:cursor-not-allowed disabled:opacity-40" data-testid="button-send-project-chat">{isChatPending ? <Loader2 className="size-3 animate-spin" /> : <Send className="size-3" />} Envoyer</button></div></div></form></>}
+          {!activeProject ? <div className="flex flex-1 flex-col items-center justify-center px-4 text-center"><MessageCircle className="size-7 text-[hsl(var(--muted-foreground))]" /><p className="mt-3 text-[12px] font-medium">Sélectionnez un projet</p><p className="mt-2 text-[11px] leading-5 text-[hsl(var(--muted-foreground))]">L’assistant pourra ensuite modifier votre application en gardant tout l’historique.</p></div> : <><div className="chat-scroll flex-1 space-y-4 overflow-y-auto pr-1">{messagesQuery.isLoading ? <div className="space-y-3"><div className="h-14 rounded-2xl bg-[hsl(var(--muted)/.4)]" /><div className="ml-auto h-12 w-4/5 rounded-2xl bg-[hsl(var(--muted)/.3)]" /></div> : messages.length ? messages.map((message) => <ChatBubble key={message.id} message={message} />) : <div className="rounded-xl border border-dashed border-[hsl(var(--border))] px-3 py-5 text-center"><Sparkles className="mx-auto size-5 text-[hsl(var(--accent))]" /><p className="mt-2 text-[11px] leading-5 text-[hsl(var(--muted-foreground))]">Demandez une modification, une nouvelle section ou une amélioration visuelle.</p></div>}{isChatPending && <div className="flex items-center gap-2 text-[11px] text-[hsl(var(--muted-foreground))]"><Loader2 className="size-3.5 animate-spin text-[hsl(var(--accent))]" /> Analyse du projet en cours...</div>}{aiCooldownActive && <div className="rounded-lg border border-amber-300/25 bg-amber-300/[.06] px-3 py-2 text-[10px] leading-4 text-amber-100" role="status">Les actions IA sont suspendues pendant {aiCooldownRemaining} seconde{aiCooldownRemaining > 1 ? 's' : ''} pour éviter une nouvelle erreur de quota.</div>}</div><form onSubmit={handleSendChat} className="mt-4 border-t border-[hsl(var(--border)/.8)] pt-4"><div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background)/.55)] focus-within:border-[hsl(var(--accent)/.65)]"><textarea value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder={aiCooldownActive ? `IA indisponible pendant ${aiCooldownRemaining}s` : 'Ex: ajoute un mode sombre et une animation d’entrée...'} rows={3} maxLength={10000} disabled={isChatPending || aiCooldownActive} className="block w-full resize-none bg-transparent px-3.5 py-3 text-[12px] leading-5 text-[hsl(var(--foreground))] outline-none placeholder:text-[hsl(var(--muted-foreground)/.7)] disabled:cursor-not-allowed" data-testid="input-project-chat" /><div className="flex items-center justify-between border-t border-[hsl(var(--border)/.65)] px-3 py-2"><span className="text-[10px] text-[hsl(var(--muted-foreground))]">{aiCooldownActive ? aiCooldownLabel : 'L’historique est sauvegardé'}</span><button type="submit" disabled={!chatInput.trim() || isChatPending || aiCooldownActive} className="inline-flex items-center gap-1.5 rounded-lg bg-[hsl(var(--accent))] px-2.5 py-1.5 text-[10px] font-semibold text-[hsl(var(--accent-foreground))] disabled:cursor-not-allowed disabled:opacity-40" data-testid="button-send-project-chat">{isChatPending ? <Loader2 className="size-3 animate-spin" /> : <Send className="size-3" />} {aiCooldownActive ? `${aiCooldownRemaining}s` : 'Envoyer'}</button></div></div></form></>}
         </aside>
       </div>
       {commandPaletteOpen && <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 px-4 pt-[12vh] backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setCommandPaletteOpen(false); }} data-testid="command-palette-overlay">

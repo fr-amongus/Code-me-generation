@@ -56,6 +56,8 @@ export type ProjectToolboxProps = {
   onSelectVersion: (versionId: string | number) => void;
   onRestoreVersion: (versionId: string | number) => void;
   onAiAction: (action: ToolboxAiAction) => void;
+  aiDisabled?: boolean;
+  aiDisabledLabel?: string;
   onClose: () => void;
 };
 
@@ -302,6 +304,8 @@ export default function ProjectToolbox({
   onSelectVersion,
   onRestoreVersion,
   onAiAction,
+  aiDisabled = false,
+  aiDisabledLabel = 'IA temporairement indisponible',
   onClose,
 }: ProjectToolboxProps) {
   const [activeTab, setActiveTab] = useState<ToolboxTab>('files');
@@ -575,11 +579,11 @@ export default function ProjectToolbox({
             ) : (
               <div className="space-y-2" data-testid="ai-action-list">
                 {aiActions.map(({ id, title, description, icon: Icon, tone }) => (
-                  <button type="button" key={id} onClick={() => onAiAction(id)} className="group flex w-full items-center gap-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background)/.28)] p-3 text-left transition-all hover:-translate-y-0.5 hover:border-[hsl(var(--primary)/.3)] hover:bg-[hsl(var(--secondary)/.48)]" data-testid={`button-ai-action-${id}`}>
+                  <button type="button" key={id} onClick={() => onAiAction(id)} disabled={aiDisabled} className="group flex w-full items-center gap-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background)/.28)] p-3 text-left transition-all hover:-translate-y-0.5 hover:border-[hsl(var(--primary)/.3)] hover:bg-[hsl(var(--secondary)/.48)] disabled:cursor-not-allowed disabled:opacity-50" data-testid={`button-ai-action-${id}`}>
                     <div className={`grid size-9 shrink-0 place-items-center rounded-lg border ${tone}`}><Icon className="size-4" strokeWidth={1.7} /></div>
                     <div className="min-w-0 flex-1">
-                      <p className="text-[11px] font-medium text-[hsl(var(--foreground))]">{title}</p>
-                      <p className="mt-1 text-[10px] leading-4 text-[hsl(var(--muted-foreground))]">{description}</p>
+                      <p className="text-[11px] font-medium text-[hsl(var(--foreground))]">{aiDisabled ? aiDisabledLabel : title}</p>
+                      <p className="mt-1 text-[10px] leading-4 text-[hsl(var(--muted-foreground))]">{aiDisabled ? 'Attendez la fin du délai puis relancez cette action une seule fois.' : description}</p>
                     </div>
                     <Play className="size-3.5 shrink-0 text-[hsl(var(--muted-foreground)/.6)] transition-transform group-hover:translate-x-0.5 group-hover:text-[hsl(var(--primary))]" />
                   </button>

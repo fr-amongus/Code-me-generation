@@ -41,6 +41,12 @@ function getErrorStatus(error: unknown): number | undefined {
   return undefined;
 }
 
+function getRetryAfterSeconds(message: string, fallback = 15) {
+  const match = message.match(/(?:in|dans|after|retry(?:\s+in)?)\s+(\d+(?:[.,]\d+)?)\s*(?:s|sec|second)/i);
+  const seconds = match ? Math.ceil(Number(match[1].replace(",", "."))) : fallback;
+  return Math.min(90, Math.max(10, Number.isFinite(seconds) ? seconds : fallback));
+}
+
 function cleanJson(value: string): string {
   const trimmed = value.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
   const start = trimmed.indexOf("{");
@@ -265,8 +271,10 @@ router.post("/projects/:projectId/chat", async (req, res): Promise<void> => {
     const status = getErrorStatus(error);
     const message = error instanceof Error ? error.message : "Unknown Gemini error";
     req.log.error({ err: error, status }, "Project chat generation failed");
-    if (status === 429 || /rate.?limit|quota|too many requests|resource exhausted/i.test(message)) {
-      res.status(429).json({ error: "Gemini est momentanément limité par son quota. Réessaie dans quelques secondes." });
+    if (status === 429 || status === 503 || /rate.?limit|quota|too many requests|resource exhausted|high demand/i.test(message)) {
+      const retryAfter = getRetryAfterSeconds(message, status === 503 ? 20 : 15);
+      res.setHeader("Retry-After", String(retryAfter));
+      res.status(status === 503 ? 503 : 429).json({ error: `Le fournisseur IA est temporairement indisponible. Réessaie dans ${retryAfter} secondes.` });
       return;
     }
     if (error instanceof SyntaxError) {
