@@ -1,10 +1,19 @@
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { transform } from "esbuild";
 
 const base = process.env.API_BASE_URL ?? "http://127.0.0.1:8080/api";
 const workspaceA = `contract-a-${Date.now()}`;
 const workspaceB = `contract-b-${Date.now()}`;
 const createdIds = [];
+
+async function loadBrowserDependencyHelper() {
+  const source = await readFile(new URL("../src/lib/browser-dependencies.ts", import.meta.url), "utf8");
+  const transformed = await transform(source, { loader: "ts", format: "esm", target: "node20" });
+  const module = await import(`data:text/javascript;base64,${Buffer.from(transformed.code).toString("base64")}`);
+  return module.ensureBrowserDependencies;
+}
 
 async function request(path, options) {
   return fetch(`${base}${path}`, {
@@ -12,6 +21,23 @@ async function request(path, options) {
     ...options,
   });
 }
+
+test("3D browser libraries are injected in dependency order without duplicates", async () => {
+  const ensureBrowserDependencies = await loadBrowserDependencyHelper();
+  const withoutDependencies = `<!doctype html><html><head><title>3D</title></head><body><script>const scene = new THREE.Scene(); const controls = new OrbitControls(camera, renderer.domElement);</script></body></html>`;
+  const fixed = ensureBrowserDependencies(withoutDependencies);
+  const threeScript = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
+  const controlsScript = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/controls/OrbitControls.js";
+
+  assert.equal(fixed.match(new RegExp(threeScript, "g"))?.length, 1);
+  assert.equal(fixed.match(new RegExp(controlsScript, "g"))?.length, 1);
+  assert.ok(fixed.indexOf(threeScript) < fixed.indexOf(controlsScript));
+  assert.ok(fixed.indexOf(controlsScript) < fixed.indexOf("<script>const scene"));
+
+  const alreadyLoaded = `<!doctype html><html><head><script src="${threeScript}"></script></head><body><script>const scene = new THREE.Scene();</script></body></html>`;
+  const unchangedDependency = ensureBrowserDependencies(alreadyLoaded);
+  assert.equal(unchangedDependency.match(new RegExp(threeScript, "g"))?.length, 1);
+});
 
 after(async () => {
   await Promise.all(createdIds.map((id) => request(`/projects/${id}`, {
