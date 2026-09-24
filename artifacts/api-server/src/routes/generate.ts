@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { GenerateApplicationBody, GenerateApplicationResponse } from "@workspace/api-zod";
 import { GoogleGenAI } from "@google/genai";
 import { hydrateAttachments } from "../lib/attachment-content";
+import { ensureBrowserDependencies } from "../lib/browser-dependencies";
 
 const router: IRouter = Router();
 
@@ -13,6 +14,10 @@ Do not include Markdown, code fences, explanations, comments outside the HTML do
 Return only the complete HTML document beginning with <!doctype html> and ending with </html>.
 The result must work offline in a browser without a build step or external dependencies.
 Make the application polished, responsive, accessible, and fully interactive based on the user's request.
+If the application needs a browser library such as Three.js, Chart.js, p5.js, or Matter.js,
+load its browser-ready UMD build with a <script src="..."></script> tag inside <head>,
+before every inline application script. Never reference an undefined global such as THREE,
+Chart, p5, or Matter, and never use an npm import in this single-file browser document.
 `;
 
 type Attachment = { name: string; type: string; content: string };
@@ -87,7 +92,7 @@ router.post("/generate", async (req, res) => {
       },
     });
 
-    const html = cleanGeneratedHtml(response.text ?? "");
+    const html = ensureBrowserDependencies(cleanGeneratedHtml(response.text ?? ""));
     if (!html) {
       req.log.error("Gemini returned an empty application");
       res.status(502).json({ error: "Gemini n'a renvoyé aucun code exploitable. Réessaie avec une description plus précise." });

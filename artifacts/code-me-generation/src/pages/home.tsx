@@ -134,9 +134,30 @@ function projectNameFromPrompt(value: string) {
   return (name.slice(0, 56) || 'Nouveau projet').replace(/[,:;]+$/, '');
 }
 
+function ensurePreviewDependencies(html: string) {
+  const dependencies = [
+    { pattern: /\bTHREE\s*\.|\bOrbitControls\b/i, src: 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js', existing: /three(?:\.min)?\.js/i },
+    { pattern: /\bOrbitControls\b/i, src: 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/controls/OrbitControls.js', existing: /OrbitControls\.js/i },
+    { pattern: /\bnew\s+Chart\s*\(|\bChart\s*\(/i, src: 'https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js', existing: /chart(?:\.umd)?(?:\.min)?\.js/i },
+    { pattern: /\bcreateCanvas\s*\(|\bnew\s+p5\s*\(/i, src: 'https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.11.1/p5.min.js', existing: /p5(?:\.min)?\.js/i },
+    { pattern: /\bMatter\./i, src: 'https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.20.0/matter.min.js', existing: /matter(?:\.min)?\.js/i },
+  ];
+  const tags = dependencies
+    .filter(({ pattern }) => pattern.test(html))
+    .filter(({ existing }) => !existing.test(html))
+    .map(({ src }) => `<script src="${src}" crossorigin="anonymous"></script>`)
+    .join('');
+  if (!tags) return html;
+  const head = html.match(/<head\b[^>]*>/i);
+  if (head) return html.replace(head[0], `${head[0]}${tags}`);
+  const doctype = html.match(/<!doctype[^>]*>/i);
+  const insertedHead = `<head>${tags}</head>`;
+  return doctype ? html.replace(doctype[0], `${doctype[0]}${insertedHead}`) : `${insertedHead}${html}`;
+}
+
 function instrumentPreviewHtml(html: string) {
   const bridge = `<script data-code-me-console>(function(){const send=(level,args,stack)=>{try{parent.postMessage({source:'code-me-preview',level,message:Array.from(args).map(v=>typeof v==='string'?v:JSON.stringify(v)).join(' '),stack:stack||''},'*')}catch(_){}};['log','info','debug'].forEach(k=>{const o=console[k];console[k]=function(){send('log',arguments);o.apply(console,arguments)}});['warn'].forEach(k=>{const o=console[k];console[k]=function(){send('warn',arguments);o.apply(console,arguments)}});['error'].forEach(k=>{const o=console[k];console[k]=function(){send('error',arguments);o.apply(console,arguments)}});window.addEventListener('error',e=>send('error',[e.message],e.error&&e.error.stack));window.addEventListener('unhandledrejection',e=>send('error',[String(e.reason)],e.reason&&e.reason.stack));})();<\/script>`;
-  return html.replace(/<head[^>]*>/i, (match) => `${match}${bridge}`);
+  return ensurePreviewDependencies(html).replace(/<head[^>]*>/i, (match) => `${match}${bridge}`);
 }
 
 type Attachment = { name: string; type: string; content: string; size: number; objectPath?: string };

@@ -2,3 +2,4 @@
 - [Gemini chat output handling](gemini-chat-output.md) — tolerate raw or wrapped HTML when structured Gemini output drifts.
 - [Groq routing](groq-routing.md) — keep Groq requests small and retain model/provider fallbacks because model access and TPM limits vary by key.
 - [AI rate-limit cooldown](ai-rate-limit-cooldown.md) — surface Retry-After and lock every AI action briefly after provider throttling.
+- [Browser library loading](browser-library-loading.md) — single-file generated apps use ordered CDN scripts for detected browser globals.

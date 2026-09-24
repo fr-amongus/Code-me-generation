@@ -10,6 +10,7 @@ import {
 import { db, projectMessagesTable, projectVersionsTable, projectsTable } from "@workspace/db";
 import { GoogleGenAI } from "@google/genai";
 import { hydrateAttachments } from "../lib/attachment-content";
+import { ensureBrowserDependencies } from "../lib/browser-dependencies";
 import { callGroq } from "../lib/groq";
 
 const router: IRouter = Router();
@@ -25,6 +26,10 @@ The html property must contain a complete self-contained HTML document with CSS 
 tags and JavaScript in <script> tags. Preserve the existing application's useful features,
 then apply the user's requested change. The application must work offline without external
 dependencies. Never return Markdown fences or text outside the JSON object.
+If the application uses a browser library such as Three.js, Chart.js, p5.js, or Matter.js,
+include its browser-ready UMD build with a <script src="..."></script> tag in <head>,
+before inline application scripts. Never leave globals such as THREE, Chart, p5, or Matter
+undefined, and never use an npm import in this single-file browser document.
 The message is shown directly to the user, so make it concrete and pedagogical: explain
 what changed, why it changed, and how the user can verify it. Do not claim a feature was
 added if it is not present in the returned HTML.
@@ -247,7 +252,7 @@ router.post("/projects/:projectId/chat", async (req, res): Promise<void> => {
 
     const output = parseChatOutput(rawOutput);
     const assistantText = output?.message ?? "";
-    const html = output?.html ?? "";
+    const html = ensureBrowserDependencies(output?.html ?? "");
     if (!assistantText || !html.toLowerCase().includes("<html")) {
       res.status(502).json({ error: "Le chat n'a pas renvoyé une amélioration exploitable." });
       return;
