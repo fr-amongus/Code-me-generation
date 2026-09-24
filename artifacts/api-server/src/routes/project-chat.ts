@@ -185,9 +185,13 @@ router.post("/projects/:projectId/chat", async (req, res): Promise<void> => {
     .limit(24);
 
   const provider = chooseChatProvider(body.data.message, Boolean(body.data.attachments?.length), (project.html ?? "").length);
-  const groqKey = provider === "groq1" ? process.env.GROQ_API_KEY_1 : provider === "groq2" ? process.env.GROQ_API_KEY_2 : undefined;
+  const groqCandidates = provider === "groq1"
+    ? [process.env.GROQ_API_KEY_1, process.env.GROQ_API_KEY_2].filter((key): key is string => Boolean(key))
+    : provider === "groq2"
+      ? [process.env.GROQ_API_KEY_2, process.env.GROQ_API_KEY_1].filter((key): key is string => Boolean(key))
+      : [];
   const geminiKey = process.env.GEMINI_API_KEY;
-  if (!groqKey && !geminiKey) {
+  if (!groqCandidates.length && !geminiKey) {
     req.log.error({ provider }, "No AI provider is configured");
     res.status(500).json({ error: "Aucun fournisseur IA n'est configuré sur le serveur." });
     return;
@@ -199,10 +203,12 @@ router.post("/projects/:projectId/chat", async (req, res): Promise<void> => {
       .join("\n\n");
     const hydratedAttachments = await hydrateAttachments(body.data.attachments);
     let rawOutput = "";
-    if (groqKey) {
+    let lastGroqError: unknown;
+    for (let index = 0; index < groqCandidates.length && !rawOutput; index += 1) {
+      const apiKey = groqCandidates[index];
       try {
         rawOutput = await callGroq({
-          apiKey: groqKey,
+          apiKey,
           messages: [
             { role: "system", content: CHAT_SYSTEM_PROMPT },
             { role: "user", content: buildGroqPrompt(project.html ?? "", conversation, body.data.message) },
@@ -210,14 +216,18 @@ router.post("/projects/:projectId/chat", async (req, res): Promise<void> => {
           maxTokens: 6000,
           json: true,
         });
-        req.log.info({ provider }, "Project chat completed with Groq");
+        req.log.info({ provider: index === 0 ? provider : "groq-fallback", fallback: index > 0 }, "Project chat completed with Groq");
       } catch (groqError) {
-        req.log.warn({ err: groqError, provider }, "Groq failed, falling back to Gemini");
+        lastGroqError = groqError;
+        req.log.warn({ err: groqError, provider: index === 0 ? provider : "groq-fallback" }, "Groq provider failed");
       }
     }
     if (!rawOutput) {
       if (!geminiKey) {
-        res.status(502).json({ error: "Le fournisseur IA sélectionné est momentanément indisponible." });
+        const message = lastGroqError instanceof Error ? lastGroqError.message : "";
+        const retryAfter = getRetryAfterSeconds(message, 20);
+        res.setHeader("Retry-After", String(retryAfter));
+        res.status(503).json({ error: `Les fournisseurs IA sont temporairement indisponibles. Réessaie dans ${retryAfter} secondes.` });
         return;
       }
       const ai = new GoogleGenAI({ apiKey: geminiKey });
@@ -232,7 +242,7 @@ router.post("/projects/:projectId/chat", async (req, res): Promise<void> => {
         },
       });
       rawOutput = response.text ?? "";
-      req.log.info({ provider: "gemini", fallback: Boolean(groqKey) }, "Project chat completed with Gemini");
+      req.log.info({ provider: "gemini", fallback: groqCandidates.length > 0 }, "Project chat completed with Gemini");
     }
 
     const output = parseChatOutput(rawOutput);
