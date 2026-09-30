@@ -22,3 +22,4 @@ export * from "./project-messages";
 export * from "./auth";
 export * from "./project-versions";
 export * from "./project-attachments";
+export * from "./project-memory-files";

@@ -4,6 +4,7 @@ import {
   ArchiveRestore,
   BarChart3,
   Braces,
+  Brain,
   Check,
   ChevronRight,
   Clock3,
@@ -45,13 +46,21 @@ export type ToolboxVersion = {
   createdAt: string;
 };
 
+export type ToolboxMemoryFile = {
+  id: number;
+  name: string;
+  content: string;
+  updatedAt: string;
+};
+
 export type ToolboxAiAction = 'explain' | 'refactor' | 'tests' | 'accessibility' | 'performance';
-export type ToolboxTab = 'files' | 'history' | 'quality' | 'assets' | 'ai';
+export type ToolboxTab = 'files' | 'history' | 'memory' | 'quality' | 'assets' | 'ai';
 
 export type ProjectToolboxProps = {
   currentHtml: string | null;
   attachments: ToolboxAttachment[];
   versions: ToolboxVersion[];
+  memoryFiles: ToolboxMemoryFile[];
   selectedVersionId: string | number | null;
   onSelectVersion: (versionId: string | number) => void;
   onRestoreVersion: (versionId: string | number) => void;
@@ -81,6 +90,7 @@ type QualityFinding = {
 const tabs: Array<{ id: ToolboxTab; label: string; icon: ComponentType<{ className?: string; strokeWidth?: number }> }> = [
   { id: 'files', label: 'Fichiers', icon: Layers3 },
   { id: 'history', label: 'Historique', icon: History },
+  { id: 'memory', label: 'Mémoire', icon: Brain },
   { id: 'quality', label: 'Qualité', icon: ShieldCheck },
   { id: 'assets', label: 'Ressources', icon: FileImage },
   { id: 'ai', label: 'Actions IA', icon: Sparkles },
@@ -300,6 +310,7 @@ export default function ProjectToolbox({
   currentHtml,
   attachments,
   versions,
+  memoryFiles,
   selectedVersionId,
   onSelectVersion,
   onRestoreVersion,
@@ -355,7 +366,7 @@ export default function ProjectToolbox({
         </button>
       </header>
 
-      <nav className="grid shrink-0 grid-cols-5 gap-0.5 border-b border-[hsl(var(--border)/.8)] bg-[hsl(var(--background)/.35)] p-1.5" aria-label="Sections de la boîte à outils" data-testid="toolbox-tabs">
+      <nav className="grid shrink-0 grid-cols-6 gap-0.5 border-b border-[hsl(var(--border)/.8)] bg-[hsl(var(--background)/.35)] p-1.5" aria-label="Sections de la boîte à outils" data-testid="toolbox-tabs">
         {tabs.map(({ id, label, icon: Icon }) => {
           const active = activeTab === id;
           return (
@@ -481,6 +492,37 @@ export default function ProjectToolbox({
                 </div>
               </>
             )}
+          </section>
+        )}
+
+        {activeTab === 'memory' && (
+          <section data-testid="section-memory">
+            <SectionHeading
+              eyebrow="Contexte persistant"
+              title="Mémoire du projet"
+              detail="Ces fichiers Markdown sont relus par l’IA avant chaque amélioration et mis à jour quand le projet évolue."
+              testId="heading-memory"
+            />
+            {!memoryFiles.length ? (
+              <EmptyState icon={Brain} title="Mémoire en préparation" detail="Un premier fichier sera créé dès que le projet sera enregistré." testId="empty-memory" />
+            ) : (
+              <div className="space-y-3" data-testid="memory-file-list">
+                {memoryFiles.map((file) => (
+                  <article key={file.id} className="overflow-hidden rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background)/.3)]" data-testid={`memory-file-${file.id}`}>
+                    <div className="flex items-center gap-2 border-b border-[hsl(var(--border)/.7)] px-3 py-2.5">
+                      <FileText className="size-3.5 text-[hsl(var(--primary))]" />
+                      <p className="min-w-0 flex-1 truncate font-mono text-[10px] text-[hsl(var(--foreground))]" data-testid={`text-memory-name-${file.id}`}>{file.name}</p>
+                      <span className="font-mono text-[8px] text-[hsl(var(--muted-foreground))]">{formatDate(file.updatedAt)}</span>
+                    </div>
+                    <pre className="max-h-56 overflow-auto whitespace-pre-wrap p-3 font-mono text-[10px] leading-5 text-[hsl(var(--muted-foreground))]" data-testid={`text-memory-content-${file.id}`}>{file.content}</pre>
+                  </article>
+                ))}
+              </div>
+            )}
+            <div className="mt-4 flex items-start gap-2 rounded-lg border border-[hsl(var(--primary)/.18)] bg-[hsl(var(--primary)/.05)] px-3 py-2.5" data-testid="memory-note">
+              <Info className="mt-0.5 size-3.5 shrink-0 text-[hsl(var(--primary))]" />
+              <p className="text-[10px] leading-4 text-[hsl(var(--muted-foreground))]">La mémoire est limitée à trois fichiers par projet. L’IA peut les condenser ou en créer un nouveau si cela clarifie le contexte.</p>
+            </div>
           </section>
         )}
 

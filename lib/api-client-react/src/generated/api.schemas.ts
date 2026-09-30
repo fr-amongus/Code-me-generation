@@ -116,6 +116,15 @@ export interface ProjectMessage {
   createdAt: string;
 }
 
+export interface ProjectMemoryFile {
+  id: number;
+  projectId: number;
+  name: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ProjectChatInput {
   /**
      * @minLength 8

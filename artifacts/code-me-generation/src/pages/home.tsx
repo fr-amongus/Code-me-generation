@@ -30,12 +30,14 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import {
+  getListProjectMemoryFilesQueryKey,
   getListProjectMessagesQueryKey,
   getListProjectsQueryKey,
   useCreateProject,
   useDeleteProject,
   useGenerateApplication,
   useListProjectMessages,
+  useListProjectMemoryFiles,
   useListProjects,
   useSendProjectMessage,
   useUpdateProject,
@@ -365,6 +367,12 @@ export default function Home() {
       enabled: Boolean(activeProject),
     },
   });
+  const memoryFilesQuery = useListProjectMemoryFiles(activeProject?.id ?? 0, {
+    query: {
+      queryKey: getListProjectMemoryFilesQueryKey(activeProject?.id ?? 0),
+      enabled: Boolean(activeProject),
+    },
+  });
   const generateMutation = useGenerateApplication();
   const createMutation = useCreateProject();
   const updateMutation = useUpdateProject();
@@ -377,6 +385,7 @@ export default function Home() {
   const hasResult = Boolean(currentHtml);
   const codeStats = useMemo(() => currentHtml ? { lines: currentHtml.split('\n').length, chars: currentHtml.length } : { lines: 0, chars: 0 }, [currentHtml]);
   const messages = messagesQuery.data ?? [];
+  const memoryFiles = memoryFilesQuery.data ?? [];
   const aiCooldownActive = aiCooldownRemaining > 0;
 
   const armAiCooldown = (aiError: unknown) => {
@@ -634,6 +643,7 @@ export default function Home() {
         setGeneratedHtml(null);
         queryClient.setQueryData<Project[]>(getListProjectsQueryKey({ workspaceId }), (previous) => previous?.map((project) => project.id === result.project.id ? result.project : project));
         queryClient.setQueryData<ProjectMessage[]>(getListProjectMessagesQueryKey(activeProject.id), (previous) => [...(previous ?? []), result.userMessage, result.assistantMessage]);
+        queryClient.invalidateQueries({ queryKey: getListProjectMemoryFilesQueryKey(activeProject.id) });
       },
       onError: armAiCooldown,
     });
@@ -716,6 +726,7 @@ export default function Home() {
       onSuccess: (result) => {
         queryClient.setQueryData<Project[]>(getListProjectsQueryKey({ workspaceId }), (previous) => previous?.map((project) => project.id === result.project.id ? result.project : project));
         queryClient.setQueryData<ProjectMessage[]>(getListProjectMessagesQueryKey(activeProject.id), (previous) => [...(previous ?? []), result.userMessage, result.assistantMessage]);
+        queryClient.invalidateQueries({ queryKey: getListProjectMemoryFilesQueryKey(activeProject.id) });
       },
       onError: armAiCooldown,
     });
@@ -734,6 +745,7 @@ export default function Home() {
         setPreviewError('');
         queryClient.setQueryData<Project[]>(getListProjectsQueryKey({ workspaceId }), (previous) => previous?.map((project) => project.id === result.project.id ? result.project : project));
         queryClient.setQueryData<ProjectMessage[]>(getListProjectMessagesQueryKey(activeProject.id), (previous) => [...(previous ?? []), result.userMessage, result.assistantMessage]);
+        queryClient.invalidateQueries({ queryKey: getListProjectMemoryFilesQueryKey(activeProject.id) });
       },
       onError: armAiCooldown,
     });
@@ -763,6 +775,7 @@ export default function Home() {
         setPreviewError('');
         queryClient.setQueryData<Project[]>(getListProjectsQueryKey({ workspaceId }), (previous) => previous?.map((project) => project.id === result.project.id ? result.project : project));
         queryClient.setQueryData<ProjectMessage[]>(getListProjectMessagesQueryKey(result.project.id), (previous) => [...(previous ?? []), result.userMessage, result.assistantMessage]);
+        queryClient.invalidateQueries({ queryKey: getListProjectMemoryFilesQueryKey(result.project.id) });
       },
       onError: armAiCooldown,
       onSettled: () => setIsFixingSecurity(false),
@@ -899,6 +912,7 @@ export default function Home() {
             currentHtml={currentHtml}
             attachments={promptAttachments}
             versions={versions}
+             memoryFiles={memoryFiles}
             selectedVersionId={selectedVersionId}
             onSelectVersion={(versionId) => setSelectedVersionId(String(versionId))}
             onRestoreVersion={handleRestoreVersion}

@@ -61,6 +61,13 @@ test("projects are isolated by workspace", async () => {
   const project = await create.json();
   createdIds.push(project.id);
 
+  const memory = await request(`/projects/${project.id}/memory`);
+  assert.equal(memory.status, 200);
+  const memoryFiles = await memory.json();
+  assert.equal(memoryFiles.length, 1);
+  assert.equal(memoryFiles[0].name, "project-overview.md");
+  assert.match(memoryFiles[0].content, /Demande initiale/);
+
   const hidden = await request(`/projects?workspaceId=${workspaceB}`);
   assert.equal(hidden.status, 200);
   assert.equal((await hidden.json()).some((item) => item.id === project.id), false);
@@ -138,6 +145,8 @@ test("empty project can be generated, improved, and versioned", { timeout: 180_0
   const chatPayload = await chat.json();
   assert.match(chatPayload.project.html, /<html/i);
   assert.ok(chatPayload.assistantMessage.content.length > 40);
+  const updatedMemory = await (await request(`/projects/${project.id}/memory`)).json();
+  assert.ok(updatedMemory.length >= 1 && updatedMemory.length <= 3);
 
   const versions = await (await request(`/projects/${project.id}/versions?workspaceId=${workspaceA}`)).json();
   assert.ok(versions.length >= 1);

@@ -16,6 +16,7 @@ export * from './project';
 export * from './projectChatInput';
 export * from './projectChatResult';
 export * from './projectInput';
+export * from './projectMemoryFile';
 export * from './projectMessage';
 export * from './projectMessageRole';
 export * from './projectUpdate';

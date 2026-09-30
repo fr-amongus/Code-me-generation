@@ -11,7 +11,7 @@ import {
   UpdateProjectParams,
   UpdateProjectResponse,
 } from "@workspace/api-zod";
-import { db, projectsTable, projectVersionsTable } from "@workspace/db";
+import { db, projectMemoryFilesTable, projectsTable, projectVersionsTable } from "@workspace/db";
 
 const router: IRouter = Router();
 
@@ -38,15 +38,38 @@ router.post("/projects", async (req, res): Promise<void> => {
     return;
   }
 
-  const [project] = await db
-    .insert(projectsTable)
-    .values({
-      workspaceId: parsed.data.workspaceId,
-      name: parsed.data.name,
-      prompt: parsed.data.prompt ?? "",
-      html: parsed.data.html ?? null,
-    })
-    .returning();
+  const project = await db.transaction(async (tx) => {
+    const [createdProject] = await tx
+      .insert(projectsTable)
+      .values({
+        workspaceId: parsed.data.workspaceId,
+        name: parsed.data.name,
+        prompt: parsed.data.prompt ?? "",
+        html: parsed.data.html ?? null,
+      })
+      .returning();
+
+    const prompt = (parsed.data.prompt ?? "").replace(
+      /(api[_-]?key|token|secret|password|mot de passe)\s*[:=]\s*\S+/gi,
+      "$1: [information masquée]",
+    );
+    await tx.insert(projectMemoryFilesTable).values({
+      projectId: createdProject.id,
+      name: "project-overview.md",
+      content: [
+        "# Vue d'ensemble du projet",
+        "",
+        `- Nom : ${createdProject.name}`,
+        "- Cette mémoire décrit le produit, ses choix et les contraintes utiles à retenir.",
+        "- Ne jamais y enregistrer de secret, clé API, mot de passe ou jeton.",
+        "",
+        "## Demande initiale",
+        "",
+        prompt || "Aucune demande initiale renseignée.",
+      ].join("\n"),
+    });
+    return createdProject;
+  });
 
   res.status(201).json(CreateProjectResponse.parse(project));
 });

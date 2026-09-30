@@ -8,6 +8,7 @@ import storageRouter from "./storage";
 import projectVersionsRouter from "./project-versions";
 import projectAttachmentsRouter from "./project-attachments";
 import projectToolsRouter from "./project-tools";
+import projectMemoryRouter from "./project-memory";
 
 const router: IRouter = Router();
 
@@ -20,5 +21,6 @@ router.use(storageRouter);
 router.use(projectVersionsRouter);
 router.use(projectAttachmentsRouter);
 router.use(projectToolsRouter);
+router.use(projectMemoryRouter);
 
 export default router;

@@ -29,6 +29,7 @@ import type {
   ProjectChatInput,
   ProjectChatResult,
   ProjectInput,
+  ProjectMemoryFile,
   ProjectMessage,
   ProjectUpdate,
   ProjectWorkspaceInput,
@@ -614,6 +615,83 @@ export function useListProjectMessages<TData = Awaited<ReturnType<typeof listPro
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getListProjectMessagesQueryOptions(projectId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListProjectMemoryFilesUrl = (projectId: number,) => {
+
+
+
+
+  return `/api/projects/${projectId}/memory`
+}
+
+/**
+ * @summary List the persistent memory files for a project
+ */
+export const listProjectMemoryFiles = async (projectId: number, options?: Parameters<typeof customFetch>[1]): Promise<ProjectMemoryFile[]> => {
+
+  return customFetch<ProjectMemoryFile[]>(getListProjectMemoryFilesUrl(projectId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListProjectMemoryFilesQueryKey = (projectId: number,) => {
+    return [
+    `/api/projects/${projectId}/memory`
+    ] as const;
+    }
+
+
+export const getListProjectMemoryFilesQueryOptions = <TData = Awaited<ReturnType<typeof listProjectMemoryFiles>>, TError = ErrorType<ApiError>>(projectId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listProjectMemoryFiles>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListProjectMemoryFilesQueryKey(projectId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listProjectMemoryFiles>>> = ({ signal }) => listProjectMemoryFiles(projectId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: projectId !== null && projectId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listProjectMemoryFiles>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListProjectMemoryFilesQueryResult = NonNullable<Awaited<ReturnType<typeof listProjectMemoryFiles>>>
+export type ListProjectMemoryFilesQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary List the persistent memory files for a project
+ */
+
+export function useListProjectMemoryFiles<TData = Awaited<ReturnType<typeof listProjectMemoryFiles>>, TError = ErrorType<ApiError>>(
+ projectId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listProjectMemoryFiles>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListProjectMemoryFilesQueryOptions(projectId,options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 

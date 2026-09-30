@@ -189,6 +189,27 @@ export const ListProjectMessagesResponse = zod.array(ListProjectMessagesResponse
 
 
 /**
+ * @summary List the persistent memory files for a project
+ */
+
+
+
+export const ListProjectMemoryFilesParams = zod.object({
+  "projectId": zod.coerce.number().min(1)
+})
+
+export const ListProjectMemoryFilesResponseItem = zod.object({
+  "id": zod.number(),
+  "projectId": zod.number(),
+  "name": zod.string(),
+  "content": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListProjectMemoryFilesResponse = zod.array(ListProjectMemoryFilesResponseItem)
+
+
+/**
  * @summary Improve a project through a saved chat message
  */
 

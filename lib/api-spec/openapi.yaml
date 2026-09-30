@@ -220,6 +220,39 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /projects/{projectId}/memory:
+    get:
+      operationId: listProjectMemoryFiles
+      tags: [projects]
+      summary: List the persistent memory files for a project
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: number
+            minimum: 1
+      responses:
+        "200":
+          description: Project memory files
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProjectMemoryFile"
+        "400":
+          description: Invalid project or workspace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /projects/{projectId}/chat:
     post:
       operationId: sendProjectMessage
@@ -470,6 +503,30 @@ components:
         - role
         - content
         - createdAt
+    ProjectMemoryFile:
+      type: object
+      properties:
+        id:
+          type: number
+        projectId:
+          type: number
+        name:
+          type: string
+        content:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - projectId
+        - name
+        - content
+        - createdAt
+        - updatedAt
     ProjectChatInput:
       type: object
       properties:
