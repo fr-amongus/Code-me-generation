@@ -2,13 +2,16 @@ import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent, type Ke
 import {
   AlertCircle,
   ArrowUpRight,
+  Brain,
   Check,
   Code2,
   Copy,
   Download,
   FileCode2,
+  FilePenLine,
   Globe2,
   History,
+  Info,
   Layers3,
   Loader2,
   MessageCircle,
@@ -47,6 +50,7 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@workspace/replit-auth-web';
 import ProjectToolbox, { type ToolboxAiAction } from '@/components/project-toolbox';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 
 type WorkspaceTab = 'preview' | 'code';
 type OutputMode = 'single' | 'advanced';
@@ -55,6 +59,46 @@ type PreviewOrientation = 'portrait' | 'landscape';
 type ConsoleEntry = { level: 'log' | 'warn' | 'error'; message: string; stack?: string; time: string };
 type SecurityFinding = { id: string; severity: 'critical' | 'high' | 'medium' | 'low' | 'info'; title: string; message: string; line?: number; evidence?: string; remediation: string };
 type SecurityReport = { scannedAt: string; score: number; findings: SecurityFinding[]; summary: Record<string, number>; aiProvider?: 'groq2' | 'groq1' | 'gemini' | 'local'; aiWarning?: string };
+type MessageActionId = 'reflect' | 'edit' | 'copy' | 'regenerate' | 'details';
+type MessageActionFeedback = { message: string; tone?: 'success' | 'neutral' | 'warning' };
+
+const messageActions: Array<{
+  id: MessageActionId;
+  label: string;
+  detail: string;
+  icon: typeof Brain;
+}> = [
+  {
+    id: 'reflect',
+    label: 'Réfléchir',
+    detail: 'Demande à l’assistant d’analyser sa réponse, ses choix et les points importants à vérifier.',
+    icon: Brain,
+  },
+  {
+    id: 'edit',
+    label: 'Modifier le code',
+    detail: 'Demande une modification concrète du projet à partir de cette réponse, sans perdre les fonctionnalités existantes.',
+    icon: FilePenLine,
+  },
+  {
+    id: 'copy',
+    label: 'Copier',
+    detail: 'Copie le contenu complet de cette réponse dans le presse-papiers.',
+    icon: Copy,
+  },
+  {
+    id: 'regenerate',
+    label: 'Régénérer',
+    detail: 'Relance l’assistant pour obtenir une nouvelle proposition sur la dernière demande.',
+    icon: RefreshCw,
+  },
+  {
+    id: 'details',
+    label: 'Détails',
+    detail: 'Affiche le statut, la date et le rôle de cette réponse dans l’historique du projet.',
+    icon: Info,
+  },
+];
 
 const starterPrompts = [
   {
@@ -310,13 +354,108 @@ function ProjectRow({
   );
 }
 
-function ChatBubble({ message }: { message: ProjectMessage }) {
+function MessageActionButton({
+  action,
+  onAction,
+  active,
+}: {
+  action: (typeof messageActions)[number];
+  onAction: () => void;
+  active?: boolean;
+}) {
+  const Icon = action.icon;
+  return (
+    <HoverCard openDelay={180} closeDelay={80}>
+      <HoverCardTrigger asChild>
+        <button
+          type="button"
+          onClick={onAction}
+          className={`grid size-7 place-items-center rounded-md border text-[hsl(var(--muted-foreground))] transition-colors hover:border-[hsl(var(--primary)/.35)] hover:bg-[hsl(var(--primary)/.08)] hover:text-[hsl(var(--primary))] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary)/.5)] ${active ? 'border-[hsl(var(--primary)/.3)] bg-[hsl(var(--primary)/.08)] text-[hsl(var(--primary))]' : 'border-transparent'}`}
+          aria-label={action.label}
+          data-testid={`button-message-action-${action.id}`}
+        >
+          <Icon className={`size-3.5 ${action.id === 'regenerate' && active ? 'animate-spin' : ''}`} />
+        </button>
+      </HoverCardTrigger>
+      <HoverCardContent
+        side="top"
+        align="start"
+        className="w-64 border-[hsl(var(--border))] bg-[hsl(var(--card))] p-3 text-[hsl(var(--foreground))] shadow-[0_18px_45px_hsl(225_32%_3%/.45)]"
+      >
+        <p className="text-[11px] font-semibold">{action.label}</p>
+        <p className="mt-1 text-[10px] leading-4 text-[hsl(var(--muted-foreground))]">{action.detail}</p>
+        <p className="mt-2 font-mono text-[8px] uppercase tracking-[.12em] text-[hsl(var(--primary))]">
+          {action.id === 'details' ? 'Cliquer pour ouvrir' : 'Cliquer pour exécuter'}
+        </p>
+      </HoverCardContent>
+    </HoverCard>
+  );
+}
+
+function ChatBubble({
+  message,
+  onAction,
+}: {
+  message: ProjectMessage;
+  onAction: (action: MessageActionId, message: ProjectMessage) => MessageActionFeedback | undefined;
+}) {
   const isUser = message.role === 'user';
+  const [copiedMessage, setCopiedMessage] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [feedback, setFeedback] = useState<MessageActionFeedback | null>(null);
+
+  const handleAction = async (action: MessageActionId) => {
+    if (action === 'copy') {
+      try {
+        await navigator.clipboard.writeText(message.content);
+        setCopiedMessage(true);
+        setFeedback({ message: 'Réponse copiée dans le presse-papiers.', tone: 'success' });
+        window.setTimeout(() => setCopiedMessage(false), 1800);
+      } catch {
+        setFeedback({ message: 'La copie n’est pas disponible dans ce navigateur.', tone: 'warning' });
+      }
+      return;
+    }
+    if (action === 'details') {
+      setDetailsOpen((current) => !current);
+      return;
+    }
+    const result = onAction(action, message);
+    if (result) setFeedback(result);
+  };
+
   return (
     <div className={`flex gap-2.5 ${isUser ? 'justify-end' : 'justify-start'}`}>
       {!isUser && <div className="mt-0.5 grid size-6 shrink-0 place-items-center rounded-lg bg-[hsl(var(--accent)/.13)] text-[hsl(var(--accent))]"><Sparkles className="size-3.5" /></div>}
-      <div className={`max-w-[88%] whitespace-pre-wrap rounded-2xl px-3 py-2.5 text-[12px] leading-5 ${isUser ? 'rounded-br-md bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'rounded-bl-md border border-[hsl(var(--border))] bg-[hsl(var(--card)/.72)] text-[hsl(var(--foreground)/.86)]'}`}>
-        {message.content}
+      <div className={`max-w-[88%] ${isUser ? '' : 'min-w-0'}`}>
+        <div className={`whitespace-pre-wrap rounded-2xl px-3 py-2.5 text-[12px] leading-5 ${isUser ? 'rounded-br-md bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'rounded-bl-md border border-[hsl(var(--border))] bg-[hsl(var(--card)/.72)] text-[hsl(var(--foreground)/.86)]'}`}>
+          {message.content}
+        </div>
+        {!isUser && (
+          <>
+            <div className="mt-1.5 flex items-center gap-0.5 pl-1" role="toolbar" aria-label="Actions de la réponse">
+              {messageActions.map((action) => (
+                <MessageActionButton
+                  key={action.id}
+                  action={action}
+                  active={action.id === 'copy' ? copiedMessage : action.id === 'details' ? detailsOpen : action.id === 'regenerate' && feedback?.message.includes('envoyée')}
+                  onAction={() => void handleAction(action.id)}
+                />
+              ))}
+              {feedback && <span className={`ml-2 truncate text-[9px] ${feedback.tone === 'success' ? 'text-[hsl(var(--primary))]' : feedback.tone === 'warning' ? 'text-amber-200' : 'text-[hsl(var(--muted-foreground))]'}`}>{feedback.message}</span>}
+            </div>
+            {detailsOpen && (
+              <div className="mt-2 rounded-lg border border-[hsl(var(--border)/.8)] bg-[hsl(var(--background)/.38)] px-3 py-2.5 text-[10px] leading-4 text-[hsl(var(--muted-foreground))]" data-testid={`message-details-${message.id}`}>
+                <div className="flex flex-wrap gap-x-3 gap-y-1 font-mono text-[8px] uppercase tracking-[.1em] text-[hsl(var(--primary))]">
+                  <span>Assistant</span>
+                  <span>{new Date(message.createdAt).toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' })}</span>
+                  <span>{message.content.length.toLocaleString('fr-FR')} caractères</span>
+                </div>
+                <p className="mt-2">Cette réponse est enregistrée dans l’historique du projet. Les actions Réfléchir, Modifier le code et Régénérer envoient une nouvelle demande à l’assistant en conservant le contexte de la conversation.</p>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   );
@@ -629,15 +768,9 @@ export default function Home() {
     });
   };
 
-  const handleSendChat = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const message = chatInput.trim();
-    if (!isAuthenticated) {
-      login();
-      return;
-    }
-    if (!activeProject || !message || isChatPending || aiCooldownActive) return;
-    chatMutation.mutate({ projectId: activeProject.id, data: { workspaceId, message, attachments: promptAttachments } }, {
+  const sendChatMessage = (message: string) => {
+    if (!activeProject || !message.trim() || isChatPending || aiCooldownActive) return false;
+    chatMutation.mutate({ projectId: activeProject.id, data: { workspaceId, message: message.trim(), attachments: promptAttachments } }, {
       onSuccess: (result) => {
         setChatInput('');
         setGeneratedHtml(null);
@@ -647,6 +780,37 @@ export default function Home() {
       },
       onError: armAiCooldown,
     });
+    return true;
+  };
+
+  const handleSendChat = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const message = chatInput.trim();
+    if (!isAuthenticated) {
+      login();
+      return;
+    }
+    sendChatMessage(message);
+  };
+
+  const handleMessageAction = (action: MessageActionId, message: ProjectMessage): MessageActionFeedback | undefined => {
+    if (!activeProject || isChatPending || aiCooldownActive) {
+      return { message: aiCooldownActive ? aiCooldownLabel : 'Attendez la fin de la demande en cours.', tone: 'warning' };
+    }
+    if (!isAuthenticated) {
+      login();
+      return { message: 'Connectez-vous pour utiliser cette action.', tone: 'warning' };
+    }
+
+    const prompts: Record<Exclude<MessageActionId, 'copy' | 'details'>, string> = {
+      reflect: `Réfléchis à ta réponse précédente et analyse-la en détail. Explique les choix importants, les limites éventuelles et les vérifications que je devrais effectuer dans le projet. Ne modifie pas le code pour cette demande : je veux une analyse claire.\n\nRéponse concernée :\n${message.content}`,
+      edit: `À partir de ta réponse précédente, applique maintenant les modifications de code nécessaires dans le projet actuel. Conserve les fonctionnalités existantes, vérifie le HTML retourné et explique précisément ce qui a été modifié.\n\nRéponse concernée :\n${message.content}`,
+      regenerate: 'Régénère une nouvelle proposition pour ma dernière demande d’amélioration. Garde le contexte du projet, mais propose une réponse et un résultat différents si cela améliore la solution.',
+    };
+    const sent = sendChatMessage(prompts[action as Exclude<MessageActionId, 'copy' | 'details'>]);
+    return sent
+      ? { message: action === 'regenerate' ? 'Nouvelle demande envoyée à l’assistant.' : 'Demande envoyée en conservant le contexte du projet.', tone: 'success' }
+      : { message: 'Cette action n’a pas pu être lancée.', tone: 'warning' };
   };
 
   const handleCopy = async () => {
@@ -956,7 +1120,7 @@ export default function Home() {
 
         <aside className="flex min-h-[560px] flex-col border-t border-[hsl(var(--border)/.8)] bg-[hsl(var(--sidebar)/.48)] p-4 sm:p-6 lg:min-h-[calc(100dvh-68px)] lg:border-l lg:border-t-0 lg:p-5">
           <div className="mb-4 flex items-center justify-between"><div><p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[hsl(var(--accent))]">03 / Assistant</p><h2 className="mt-2 text-[19px] font-medium tracking-[-0.04em]">Améliorer le projet</h2></div><div className="grid size-8 place-items-center rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card)/.6)] text-[hsl(var(--accent))]"><Sparkles className="size-4" /></div></div>
-          {!activeProject ? <div className="flex flex-1 flex-col items-center justify-center px-4 text-center"><MessageCircle className="size-7 text-[hsl(var(--muted-foreground))]" /><p className="mt-3 text-[12px] font-medium">Sélectionnez un projet</p><p className="mt-2 text-[11px] leading-5 text-[hsl(var(--muted-foreground))]">L’assistant pourra ensuite modifier votre application en gardant tout l’historique.</p></div> : <><div className="chat-scroll flex-1 space-y-4 overflow-y-auto pr-1">{messagesQuery.isLoading ? <div className="space-y-3"><div className="h-14 rounded-2xl bg-[hsl(var(--muted)/.4)]" /><div className="ml-auto h-12 w-4/5 rounded-2xl bg-[hsl(var(--muted)/.3)]" /></div> : messages.length ? messages.map((message) => <ChatBubble key={message.id} message={message} />) : <div className="rounded-xl border border-dashed border-[hsl(var(--border))] px-3 py-5 text-center"><Sparkles className="mx-auto size-5 text-[hsl(var(--accent))]" /><p className="mt-2 text-[11px] leading-5 text-[hsl(var(--muted-foreground))]">Demandez une modification, une nouvelle section ou une amélioration visuelle.</p></div>}{isChatPending && <div className="flex items-center gap-2 text-[11px] text-[hsl(var(--muted-foreground))]"><Loader2 className="size-3.5 animate-spin text-[hsl(var(--accent))]" /> Analyse du projet en cours...</div>}{aiCooldownActive && <div className="rounded-lg border border-amber-300/25 bg-amber-300/[.06] px-3 py-2 text-[10px] leading-4 text-amber-100" role="status">Les actions IA sont suspendues pendant {aiCooldownRemaining} seconde{aiCooldownRemaining > 1 ? 's' : ''} pour éviter une nouvelle erreur de quota.</div>}</div><form onSubmit={handleSendChat} className="mt-4 border-t border-[hsl(var(--border)/.8)] pt-4"><div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background)/.55)] focus-within:border-[hsl(var(--accent)/.65)]"><textarea value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder={aiCooldownActive ? `IA indisponible pendant ${aiCooldownRemaining}s` : 'Ex: ajoute un mode sombre et une animation d’entrée...'} rows={3} maxLength={10000} disabled={isChatPending || aiCooldownActive} className="block w-full resize-none bg-transparent px-3.5 py-3 text-[12px] leading-5 text-[hsl(var(--foreground))] outline-none placeholder:text-[hsl(var(--muted-foreground)/.7)] disabled:cursor-not-allowed" data-testid="input-project-chat" /><div className="flex items-center justify-between border-t border-[hsl(var(--border)/.65)] px-3 py-2"><span className="text-[10px] text-[hsl(var(--muted-foreground))]">{aiCooldownActive ? aiCooldownLabel : 'L’historique est sauvegardé'}</span><button type="submit" disabled={!chatInput.trim() || isChatPending || aiCooldownActive} className="inline-flex items-center gap-1.5 rounded-lg bg-[hsl(var(--accent))] px-2.5 py-1.5 text-[10px] font-semibold text-[hsl(var(--accent-foreground))] disabled:cursor-not-allowed disabled:opacity-40" data-testid="button-send-project-chat">{isChatPending ? <Loader2 className="size-3 animate-spin" /> : <Send className="size-3" />} {aiCooldownActive ? `${aiCooldownRemaining}s` : 'Envoyer'}</button></div></div></form></>}
+      {!activeProject ? <div className="flex flex-1 flex-col items-center justify-center px-4 text-center"><MessageCircle className="size-7 text-[hsl(var(--muted-foreground))]" /><p className="mt-3 text-[12px] font-medium">Sélectionnez un projet</p><p className="mt-2 text-[11px] leading-5 text-[hsl(var(--muted-foreground))]">L’assistant pourra ensuite modifier votre application en gardant tout l’historique.</p></div> : <><div className="chat-scroll flex-1 space-y-4 overflow-y-auto pr-1">{messagesQuery.isLoading ? <div className="space-y-3"><div className="h-14 rounded-2xl bg-[hsl(var(--muted)/.4)]" /><div className="ml-auto h-12 w-4/5 rounded-2xl bg-[hsl(var(--muted)/.3)]" /></div> : messages.length ? messages.map((message) => <ChatBubble key={message.id} message={message} onAction={handleMessageAction} />) : <div className="rounded-xl border border-dashed border-[hsl(var(--border))] px-3 py-5 text-center"><Sparkles className="mx-auto size-5 text-[hsl(var(--accent))]" /><p className="mt-2 text-[11px] leading-5 text-[hsl(var(--muted-foreground))]">Demandez une modification, une nouvelle section ou une amélioration visuelle.</p></div>}{isChatPending && <div className="flex items-center gap-2 text-[11px] text-[hsl(var(--muted-foreground))]"><Loader2 className="size-3.5 animate-spin text-[hsl(var(--accent))]" /> Analyse du projet en cours...</div>}{aiCooldownActive && <div className="rounded-lg border border-amber-300/25 bg-amber-300/[.06] px-3 py-2 text-[10px] leading-4 text-amber-100" role="status">Les actions IA sont suspendues pendant {aiCooldownRemaining} seconde{aiCooldownRemaining > 1 ? 's' : ''} pour éviter une nouvelle erreur de quota.</div>}</div><form onSubmit={handleSendChat} className="mt-4 border-t border-[hsl(var(--border)/.8)] pt-4"><div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background)/.55)] focus-within:border-[hsl(var(--accent)/.65)]"><textarea value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder={aiCooldownActive ? `IA indisponible pendant ${aiCooldownRemaining}s` : 'Ex: ajoute un mode sombre et une animation d’entrée...'} rows={3} maxLength={10000} disabled={isChatPending || aiCooldownActive} className="block w-full resize-none bg-transparent px-3.5 py-3 text-[12px] leading-5 text-[hsl(var(--foreground))] outline-none placeholder:text-[hsl(var(--muted-foreground)/.7)] disabled:cursor-not-allowed" data-testid="input-project-chat" /><div className="flex items-center justify-between border-t border-[hsl(var(--border)/.65)] px-3 py-2"><span className="text-[10px] text-[hsl(var(--muted-foreground))]">{aiCooldownActive ? aiCooldownLabel : 'L’historique est sauvegardé'}</span><button type="submit" disabled={!chatInput.trim() || isChatPending || aiCooldownActive} className="inline-flex items-center gap-1.5 rounded-lg bg-[hsl(var(--accent))] px-2.5 py-1.5 text-[10px] font-semibold text-[hsl(var(--accent-foreground))] disabled:cursor-not-allowed disabled:opacity-40" data-testid="button-send-project-chat">{isChatPending ? <Loader2 className="size-3 animate-spin" /> : <Send className="size-3" />} {aiCooldownActive ? `${aiCooldownRemaining}s` : 'Envoyer'}</button></div></div></form></>}
         </aside>
       </div>
       {commandPaletteOpen && <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 px-4 pt-[12vh] backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setCommandPaletteOpen(false); }} data-testid="command-palette-overlay">
