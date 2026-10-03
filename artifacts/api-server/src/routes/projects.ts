@@ -12,13 +12,19 @@ import {
   UpdateProjectResponse,
 } from "@workspace/api-zod";
 import { db, projectMemoryFilesTable, projectsTable, projectVersionsTable } from "@workspace/db";
+import { requireAuth } from "../middlewares/authMiddleware";
 
 const router: IRouter = Router();
+router.use("/projects", requireAuth);
 
 router.get("/projects", async (req, res): Promise<void> => {
   const parsed = ListProjectsQueryParams.safeParse(req.query);
   if (!parsed.success) {
     res.status(400).json({ error: "Workspace invalide." });
+    return;
+  }
+  if (parsed.data.workspaceId !== req.user?.id) {
+    res.status(404).json({ error: "Workspace introuvable." });
     return;
   }
 
@@ -35,6 +41,10 @@ router.post("/projects", async (req, res): Promise<void> => {
   const parsed = CreateProjectBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: "Les informations du projet sont invalides." });
+    return;
+  }
+  if (parsed.data.workspaceId !== req.user?.id) {
+    res.status(404).json({ error: "Workspace introuvable." });
     return;
   }
 
@@ -81,6 +91,10 @@ router.patch("/projects/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: "Les informations du projet sont invalides." });
     return;
   }
+  if (body.data.workspaceId !== req.user?.id) {
+    res.status(404).json({ error: "Projet introuvable." });
+    return;
+  }
 
   const [previousProject] = await db
     .select()
@@ -118,6 +132,10 @@ router.delete("/projects/:id", async (req, res): Promise<void> => {
   const body = DeleteProjectBody.safeParse(req.body);
   if (!params.success || !body.success) {
     res.status(400).json({ error: "Projet ou workspace invalide." });
+    return;
+  }
+  if (body.data.workspaceId !== req.user?.id) {
+    res.status(404).json({ error: "Projet introuvable." });
     return;
   }
 

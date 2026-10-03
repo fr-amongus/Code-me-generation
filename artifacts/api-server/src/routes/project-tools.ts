@@ -5,8 +5,10 @@ import { db, projectVersionsTable, projectsTable } from "@workspace/db";
 import { GoogleGenAI } from "@google/genai";
 import { buildSecurityReport, scanProjectHtml, type SecurityFinding } from "../lib/project-security";
 import { callGroq } from "../lib/groq";
+import { requireAuth } from "../middlewares/authMiddleware";
 
 const router: IRouter = Router();
+router.use("/projects", requireAuth);
 const commandBody = z.object({ workspaceId: z.string().min(8).max(128), command: z.string().trim().min(1).max(500) });
 const allowedCommands = ["help", "pwd", "ls", "cat index.html", "head index.html", "tail index.html", "wc -l index.html", "versions", "security scan"];
 const aiFindingSchema = z.object({
@@ -96,7 +98,10 @@ router.post("/projects/:projectId/security-scan", async (req, res): Promise<void
   const projectId = Number(req.params.projectId);
   const parsed = z.object({ workspaceId: z.string().min(8).max(128) }).safeParse(req.body);
   if (!Number.isInteger(projectId) || !parsed.success) { res.status(400).json({ error: "Projet ou workspace invalide." }); return; }
-  const project = await getProject(projectId, parsed.data.workspaceId);
+  const userId = req.user?.id;
+  if (!userId) { res.status(401).json({ error: "Connectez-vous pour accéder à ce projet." }); return; }
+  if (parsed.data.workspaceId !== userId) { res.status(404).json({ error: "Projet introuvable." }); return; }
+  const project = await getProject(projectId, userId);
   if (!project) { res.status(404).json({ error: "Projet introuvable." }); return; }
   const localReport = scanProjectHtml(project.html ?? "");
   res.json(await scanWithAi(project.html ?? "", localReport.findings));
@@ -106,7 +111,10 @@ router.post("/projects/:projectId/shell", async (req, res): Promise<void> => {
   const projectId = Number(req.params.projectId);
   const parsed = commandBody.safeParse(req.body);
   if (!Number.isInteger(projectId) || !parsed.success) { res.status(400).json({ error: "Commande ou workspace invalide." }); return; }
-  const project = await getProject(projectId, parsed.data.workspaceId);
+  const userId = req.user?.id;
+  if (!userId) { res.status(401).json({ error: "Connectez-vous pour accéder à ce projet." }); return; }
+  if (parsed.data.workspaceId !== userId) { res.status(404).json({ error: "Projet introuvable." }); return; }
+  const project = await getProject(projectId, userId);
   if (!project) { res.status(404).json({ error: "Projet introuvable." }); return; }
   const command = parsed.data.command;
   let output = "";

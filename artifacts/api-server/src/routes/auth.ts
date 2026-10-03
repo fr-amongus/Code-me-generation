@@ -1,4 +1,5 @@
 import { db, usersTable } from '@workspace/db';
+import { sql } from 'drizzle-orm';
 import { Router, type IRouter, type Request, type Response } from 'express';
 import * as oidc from 'openid-client';
 import { z } from 'zod';
@@ -8,16 +9,75 @@ import {
   createSession,
   deleteSession,
   getOidcConfig,
+  getSession,
   getSessionId,
+  hashPassword,
   ISSUER_URL,
   SESSION_COOKIE,
   SESSION_TTL,
   type SessionData,
+  verifyPassword,
 } from '../lib/auth';
 
 const OIDC_COOKIE_TTL = 10 * 60 * 1000;
 
 const router: IRouter = Router();
+const credentialsSchema = z.object({
+  username: z.string().trim().min(3).max(32).regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/),
+  password: z.string().min(8).max(128),
+});
+const loginAttempts = new Map<string, { count: number; expiresAt: number }>();
+const ATTEMPT_WINDOW_MS = 10 * 60 * 1000;
+const MAX_ATTEMPTS = 10;
+
+function attemptKey(req: Request, username: string) {
+  return `${req.ip || req.socket.remoteAddress || 'unknown'}:${username.toLowerCase()}`;
+}
+
+function isRateLimited(key: string) {
+  const current = loginAttempts.get(key);
+  if (!current || current.expiresAt <= Date.now()) {
+    loginAttempts.delete(key);
+    return false;
+  }
+  return current.count >= MAX_ATTEMPTS;
+}
+
+function recordFailedAttempt(key: string) {
+  const current = loginAttempts.get(key);
+  if (!current || current.expiresAt <= Date.now()) {
+    loginAttempts.set(key, { count: 1, expiresAt: Date.now() + ATTEMPT_WINDOW_MS });
+  } else {
+    current.count += 1;
+  }
+  if (loginAttempts.size > 10_000) {
+    for (const [candidate, attempt] of loginAttempts) {
+      if (attempt.expiresAt <= Date.now()) loginAttempts.delete(candidate);
+    }
+  }
+}
+
+function clearFailedAttempts(key: string) {
+  loginAttempts.delete(key);
+}
+
+function publicUser(user: {
+  id: string;
+  username: string | null;
+  email: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  profileImageUrl: string | null;
+}) {
+  return {
+    id: user.id,
+    username: user.username,
+    email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    profileImageUrl: user.profileImageUrl,
+  };
+}
 
 function getOrigin(req: Request): string {
   const proto = req.headers['x-forwarded-proto'] || 'https';
@@ -118,7 +178,110 @@ async function upsertUser(claims: Record<string, unknown>) {
 }
 
 router.get('/auth/user', (req: Request, res: Response) => {
-  res.json({ user: req.isAuthenticated() ? req.user : null });
+  res.json({
+    user: req.isAuthenticated() ? req.user : null,
+    authMethod: req.isAuthenticated() ? req.authMethod ?? 'replit' : null,
+  });
+});
+
+router.post('/auth/register', async (req: Request, res: Response): Promise<void> => {
+  const parsed = credentialsSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Choisis un pseudo de 3 à 32 caractères et un mot de passe d’au moins 8 caractères.' });
+    return;
+  }
+
+  const username = parsed.data.username.toLowerCase();
+  const key = attemptKey(req, 'register');
+  if (isRateLimited(key)) {
+    res.setHeader('Retry-After', '600');
+    res.status(429).json({ error: 'Trop de tentatives de création. Réessaie dans quelques minutes.' });
+    return;
+  }
+
+  const passwordHash = await hashPassword(parsed.data.password);
+  const [user] = await db.insert(usersTable).values({
+    username,
+    passwordHash,
+    firstName: username,
+  }).onConflictDoNothing().returning({
+    id: usersTable.id,
+    username: usersTable.username,
+    email: usersTable.email,
+    firstName: usersTable.firstName,
+    lastName: usersTable.lastName,
+    profileImageUrl: usersTable.profileImageUrl,
+  });
+
+  if (!user) {
+    recordFailedAttempt(key);
+    res.status(409).json({ error: 'Ce pseudo est déjà utilisé. Choisis-en un autre.' });
+    return;
+  }
+
+  clearFailedAttempts(key);
+  const sessionData: SessionData = {
+    provider: 'password',
+    user: publicUser(user),
+  };
+  const sid = await createSession(sessionData);
+  setSessionCookie(res, sid);
+  res.status(201).json({ user: publicUser(user), authMethod: 'password' });
+});
+
+router.post('/auth/password/login', async (req: Request, res: Response): Promise<void> => {
+  const parsed = credentialsSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Pseudo ou mot de passe invalide.' });
+    return;
+  }
+
+  const username = parsed.data.username.toLowerCase();
+  const key = attemptKey(req, username);
+  if (isRateLimited(key)) {
+    res.setHeader('Retry-After', '600');
+    res.status(429).json({ error: 'Trop de tentatives de connexion. Réessaie dans quelques minutes.' });
+    return;
+  }
+
+  const [user] = await db.select({
+    id: usersTable.id,
+    username: usersTable.username,
+    email: usersTable.email,
+    firstName: usersTable.firstName,
+    lastName: usersTable.lastName,
+    profileImageUrl: usersTable.profileImageUrl,
+    passwordHash: usersTable.passwordHash,
+  }).from(usersTable).where(sql`lower(${usersTable.username}) = ${username}`).limit(1);
+
+  const verified = await verifyPassword(parsed.data.password, user?.passwordHash ?? null);
+  if (!user || !verified) {
+    recordFailedAttempt(key);
+    res.status(401).json({ error: 'Pseudo ou mot de passe incorrect.' });
+    return;
+  }
+
+  clearFailedAttempts(key);
+  const sessionData: SessionData = {
+    provider: 'password',
+    user: publicUser(user),
+  };
+  const sid = await createSession(sessionData);
+  setSessionCookie(res, sid);
+  res.json({ user: publicUser(user), authMethod: 'password' });
+});
+
+router.post('/auth/logout', async (req: Request, res: Response): Promise<void> => {
+  const sid = getSessionId(req);
+  if (sid) {
+    const session = await getSession(sid);
+    if (session?.provider === 'replit' || (session && !session.provider && session.access_token)) {
+      res.status(400).json({ error: 'Utilise la déconnexion du fournisseur pour fermer cette session.' });
+      return;
+    }
+  }
+  await clearSession(res, sid);
+  res.json({ success: true });
 });
 
 router.get('/login', async (req: Request, res: Response) => {
@@ -201,11 +364,13 @@ router.get('/callback', async (req: Request, res: Response) => {
   const sessionData: SessionData = {
     user: {
       id: dbUser.id,
+      username: dbUser.username,
       email: dbUser.email,
       firstName: dbUser.firstName,
       lastName: dbUser.lastName,
       profileImageUrl: dbUser.profileImageUrl,
     },
+    provider: 'replit',
     access_token: tokens.access_token,
     refresh_token: tokens.refresh_token,
     expires_at: tokens.expiresIn() ? now + tokens.expiresIn()! : claims.exp,
@@ -279,11 +444,13 @@ router.post(
       const sessionData: SessionData = {
         user: {
           id: dbUser.id,
+          username: dbUser.username,
           email: dbUser.email,
           firstName: dbUser.firstName,
           lastName: dbUser.lastName,
           profileImageUrl: dbUser.profileImageUrl,
         },
+        provider: 'replit',
         access_token: tokens.access_token,
         refresh_token: tokens.refresh_token,
         expires_at: tokens.expiresIn() ? now + tokens.expiresIn()! : claims.exp,

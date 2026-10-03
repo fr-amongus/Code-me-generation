@@ -2,8 +2,10 @@ import { and, asc, eq } from "drizzle-orm";
 import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { db, projectVersionsTable, projectsTable } from "@workspace/db";
+import { requireAuth } from "../middlewares/authMiddleware";
 
 const router: IRouter = Router();
+router.use("/projects", requireAuth);
 const workspaceBody = z.object({ workspaceId: z.string().min(8).max(128) });
 
 router.get("/projects/:projectId/versions", async (req, res): Promise<void> => {
@@ -13,6 +15,7 @@ router.get("/projects/:projectId/versions", async (req, res): Promise<void> => {
     res.status(400).json({ error: "Projet ou workspace invalide." });
     return;
   }
+  if (!req.user?.id || workspaceId !== req.user.id) { res.status(404).json({ error: "Projet introuvable." }); return; }
   const [project] = await db.select({ id: projectsTable.id }).from(projectsTable)
     .where(and(eq(projectsTable.id, projectId), eq(projectsTable.workspaceId, workspaceId)));
   if (!project) { res.status(404).json({ error: "Projet introuvable." }); return; }
@@ -24,6 +27,7 @@ router.post("/projects/:projectId/versions", async (req, res): Promise<void> => 
   const projectId = Number(req.params.projectId);
   const parsed = workspaceBody.extend({ html: z.string().min(1).max(2_000_000), label: z.string().max(120).optional() }).safeParse(req.body);
   if (!Number.isInteger(projectId) || !parsed.success) { res.status(400).json({ error: "Version invalide." }); return; }
+  if (!req.user?.id || parsed.data.workspaceId !== req.user.id) { res.status(404).json({ error: "Projet introuvable." }); return; }
   const [project] = await db.select({ id: projectsTable.id }).from(projectsTable)
     .where(and(eq(projectsTable.id, projectId), eq(projectsTable.workspaceId, parsed.data.workspaceId)));
   if (!project) { res.status(404).json({ error: "Projet introuvable." }); return; }
@@ -36,6 +40,7 @@ router.post("/projects/:projectId/versions/:versionId/restore", async (req, res)
   const versionId = Number(req.params.versionId);
   const parsed = workspaceBody.safeParse(req.body);
   if (!Number.isInteger(projectId) || !Number.isInteger(versionId) || !parsed.success) { res.status(400).json({ error: "Restauration invalide." }); return; }
+  if (!req.user?.id || parsed.data.workspaceId !== req.user.id) { res.status(404).json({ error: "Projet introuvable." }); return; }
   const [version] = await db.select().from(projectVersionsTable).where(and(eq(projectVersionsTable.id, versionId), eq(projectVersionsTable.projectId, projectId)));
   const [project] = await db.select().from(projectsTable).where(and(eq(projectsTable.id, projectId), eq(projectsTable.workspaceId, parsed.data.workspaceId)));
   if (!version || !project) { res.status(404).json({ error: "Version ou projet introuvable." }); return; }

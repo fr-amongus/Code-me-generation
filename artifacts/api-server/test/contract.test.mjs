@@ -4,9 +4,10 @@ import { readFile } from "node:fs/promises";
 import { transform } from "esbuild";
 
 const base = process.env.API_BASE_URL ?? "http://127.0.0.1:8080/api";
-const workspaceA = `contract-a-${Date.now()}`;
+let workspaceA = `contract-a-${Date.now()}`;
 const workspaceB = `contract-b-${Date.now()}`;
 const createdIds = [];
+let authCookie = "";
 
 async function loadBrowserDependencyHelper() {
   const source = await readFile(new URL("../src/lib/browser-dependencies.ts", import.meta.url), "utf8");
@@ -15,11 +16,18 @@ async function loadBrowserDependencyHelper() {
   return module.ensureBrowserDependencies;
 }
 
-async function request(path, options) {
+async function request(path, options = {}, withAuth = true) {
+  const headers = new Headers({ "content-type": "application/json", ...(options?.headers ?? {}) });
+  if (withAuth && authCookie) headers.set("cookie", authCookie);
   return fetch(`${base}${path}`, {
-    headers: { "content-type": "application/json", ...(options?.headers ?? {}) },
     ...options,
+    headers,
   });
+}
+
+function sessionCookie(response) {
+  const setCookieHeaders = response.headers.getSetCookie?.() ?? [response.headers.get("set-cookie") ?? ""];
+  return setCookieHeaders.find((header) => header.startsWith("sid="))?.split(";", 1)[0] ?? "";
 }
 
 test("3D browser libraries are injected in dependency order without duplicates", async () => {
@@ -46,10 +54,38 @@ after(async () => {
   })));
 });
 
+test("Code Me accounts register and sign in with only a username and password", async () => {
+  const username = `contract-${Date.now()}`;
+  const password = "test-password-123";
+  const registration = await request("/auth/register", {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  }, false);
+  assert.equal(registration.status, 201);
+  const created = await registration.json();
+  assert.equal(created.user.username, username.toLowerCase());
+  assert.equal(created.user.email, null);
+  assert.equal(created.authMethod, "password");
+  workspaceA = created.user.id;
+
+  const login = await request("/auth/password/login", {
+    method: "POST",
+    body: JSON.stringify({ username: username.toUpperCase(), password }),
+  }, false);
+  assert.equal(login.status, 200);
+  authCookie = sessionCookie(login);
+  assert.match(authCookie, /^sid=/);
+});
+
 test("auth route exposes an explicit unauthenticated state", async () => {
-  const response = await request("/auth/user");
+  const response = await request("/auth/user", {}, false);
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { user: null });
+  assert.deepEqual(await response.json(), { user: null, authMethod: null });
+});
+
+test("project routes reject requests without a signed-in account", async () => {
+  const response = await request(`/projects?workspaceId=${workspaceA}`, {}, false);
+  assert.equal(response.status, 401);
 });
 
 test("projects are isolated by workspace", async () => {
@@ -69,8 +105,7 @@ test("projects are isolated by workspace", async () => {
   assert.match(memoryFiles[0].content, /Demande initiale/);
 
   const hidden = await request(`/projects?workspaceId=${workspaceB}`);
-  assert.equal(hidden.status, 200);
-  assert.equal((await hidden.json()).some((item) => item.id === project.id), false);
+  assert.equal(hidden.status, 404);
 
   const forbiddenUpdate = await request(`/projects/${project.id}`, {
     method: "PATCH",
@@ -111,7 +146,7 @@ test("storage upload URLs require authentication", async () => {
   const response = await request("/storage/uploads/request-url", {
     method: "POST",
     body: JSON.stringify({ name: "contract.txt", size: 8, contentType: "text/plain" }),
-  });
+  }, false);
   assert.equal(response.status, 401);
 });
 
@@ -150,4 +185,12 @@ test("empty project can be generated, improved, and versioned", { timeout: 180_0
 
   const versions = await (await request(`/projects/${project.id}/versions?workspaceId=${workspaceA}`)).json();
   assert.ok(versions.length >= 1);
+});
+
+test("Code Me account logout revokes the password session", async () => {
+  const response = await request("/auth/logout", { method: "POST" });
+  assert.equal(response.status, 200);
+  authCookie = "";
+  const authState = await request("/auth/user", {}, false);
+  assert.deepEqual(await authState.json(), { user: null, authMethod: null });
 });

@@ -41,6 +41,51 @@ export interface ApiError {
   error: string;
 }
 
+export interface AuthCredentials {
+  /**
+     * @minLength 3
+     * @maxLength 32
+     * @pattern ^[A-Za-z0-9][A-Za-z0-9._-]*$
+     */
+  username: string;
+  /**
+     * @minLength 8
+     * @maxLength 128
+     */
+  password: string;
+}
+
+export interface AuthUser {
+  id: string;
+  /** @nullable */
+  username: string | null;
+  /** @nullable */
+  email: string | null;
+  /** @nullable */
+  firstName: string | null;
+  /** @nullable */
+  lastName: string | null;
+  /** @nullable */
+  profileImageUrl: string | null;
+}
+
+export type AuthSessionAuthMethod = typeof AuthSessionAuthMethod[keyof typeof AuthSessionAuthMethod] | null;
+
+
+export const AuthSessionAuthMethod = {
+  password: 'password',
+  replit: 'replit',
+} as const;
+
+export interface AuthSession {
+  user: AuthUser | null;
+  authMethod: AuthSessionAuthMethod;
+}
+
+export interface AuthLogout {
+  success: boolean;
+}
+
 export interface Project {
   id: number;
   workspaceId: string;

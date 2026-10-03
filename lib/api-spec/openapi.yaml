@@ -16,6 +16,8 @@ tags:
     description: Saved project workspace operations
   - name: chat
     description: Project improvement conversations
+  - name: auth
+    description: Code Me account and session operations
 paths:
   /healthz:
     get:
@@ -67,6 +69,96 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiError"
+  /auth/user:
+    get:
+      operationId: getCurrentAuthUser
+      tags: [auth]
+      summary: Get the current signed-in account
+      responses:
+        "200":
+          description: Current account or null when signed out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSession"
+  /auth/register:
+    post:
+      operationId: registerAccount
+      tags: [auth]
+      summary: Register a Code Me account with username and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthCredentials"
+      responses:
+        "201":
+          description: Account created and signed in
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSession"
+        "400":
+          description: Invalid username or password
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: Username already in use
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /auth/password/login:
+    post:
+      operationId: loginWithPassword
+      tags: [auth]
+      summary: Sign in with a Code Me username and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AuthCredentials"
+      responses:
+        "200":
+          description: Signed-in account
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthSession"
+        "400":
+          description: Invalid login input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "401":
+          description: Username or password is incorrect
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: Too many login attempts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /auth/logout:
+    post:
+      operationId: logoutAccount
+      tags: [auth]
+      summary: Sign out of a Code Me account
+      responses:
+        "200":
+          description: Signed out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthLogout"
   /projects:
     get:
       operationId: listProjects
@@ -407,6 +499,54 @@ components:
           type: string
       required:
         - error
+    AuthCredentials:
+      type: object
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 32
+          pattern: "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        password:
+          type: string
+          minLength: 8
+          maxLength: 128
+      required: [username, password]
+    AuthUser:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: ["string", "null"]
+        email:
+          type: ["string", "null"]
+        firstName:
+          type: ["string", "null"]
+        lastName:
+          type: ["string", "null"]
+        profileImageUrl:
+          type: ["string", "null"]
+      required: [id, username, email, firstName, lastName, profileImageUrl]
+    AuthSession:
+      type: object
+      properties:
+        user:
+          anyOf:
+            - $ref: "#/components/schemas/AuthUser"
+            - type: "null"
+        authMethod:
+          anyOf:
+            - type: string
+              enum: [password, replit]
+            - type: "null"
+      required: [user, authMethod]
+    AuthLogout:
+      type: object
+      properties:
+        success:
+          type: boolean
+      required: [success]
     Project:
       type: object
       properties:

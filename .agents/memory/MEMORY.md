@@ -3,3 +3,4 @@
 - [Groq routing](groq-routing.md) — keep Groq requests small and retain model/provider fallbacks because model access and TPM limits vary by key.
 - [AI rate-limit cooldown](ai-rate-limit-cooldown.md) — surface Retry-After and lock every AI action briefly after provider throttling.
 - [Browser library loading](browser-library-loading.md) — single-file generated apps use ordered CDN scripts for detected browser globals.
+- [Code Me account scope](code-me-account-scope.md) — Code Me registration uses username and password only; recovery is deferred while Replit remains optional.

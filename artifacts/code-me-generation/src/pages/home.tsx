@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent, type KeyboardEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent, type KeyboardEvent } from 'react';
 import {
   AlertCircle,
   ArrowUpRight,
@@ -461,10 +461,76 @@ function ChatBubble({
   );
 }
 
+function AiActivityLog({
+  messages,
+  isLoading,
+  isPending,
+}: {
+  messages: ProjectMessage[];
+  isLoading: boolean;
+  isPending: boolean;
+}) {
+  const activity = useMemo(() => {
+    const entries: Array<{ request: ProjectMessage; response?: ProjectMessage }> = [];
+    for (const message of messages) {
+      if (message.role === 'user') {
+        entries.push({ request: message });
+      } else if (message.role === 'assistant') {
+        const last = entries.at(-1);
+        if (last && !last.response) last.response = message;
+      }
+    }
+    return entries.reverse();
+  }, [messages]);
+
+  return (
+    <section className="flex min-h-0 flex-1 flex-col" aria-label="Journal du travail de l’assistant" data-testid="panel-ai-activity">
+      <div className="mb-3 flex items-center justify-between border-b border-[hsl(var(--border)/.75)] pb-3">
+        <span className="font-mono text-[9px] uppercase tracking-[.18em] text-[hsl(var(--muted-foreground))]">Journal IA · {messages.length} messages</span>
+        {isPending && <span className="inline-flex items-center gap-1.5 text-[9px] text-[hsl(var(--accent))]"><Loader2 className="size-3 animate-spin" /> En cours</span>}
+      </div>
+      <div className="chat-scroll flex-1 space-y-2 overflow-y-auto pr-1">
+        {isLoading ? (
+          <div className="flex items-center gap-2 py-4 text-[10px] text-[hsl(var(--muted-foreground))]"><Loader2 className="size-3 animate-spin" /> Chargement de l’historique…</div>
+        ) : activity.length ? activity.map(({ request, response }) => (
+          <details key={request.id} className="rounded-xl border border-[hsl(var(--border)/.8)] bg-[hsl(var(--card)/.55)] p-3">
+            <summary className="cursor-pointer list-none">
+              <span className="flex items-center justify-between gap-2">
+                <span className="line-clamp-2 text-[10px] font-medium leading-4 text-[hsl(var(--foreground))]">{request.content}</span>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 font-mono text-[8px] uppercase ${response ? 'bg-[hsl(var(--primary)/.1)] text-[hsl(var(--primary))]' : 'bg-amber-300/10 text-amber-200'}`}>{response ? 'Terminée' : 'En attente'}</span>
+              </span>
+              <span className="mt-2 block font-mono text-[8px] text-[hsl(var(--muted-foreground))]">{new Date(request.createdAt).toLocaleString('fr-FR', { dateStyle: 'medium', timeStyle: 'short' })}</span>
+            </summary>
+            <div className="mt-3 border-t border-[hsl(var(--border)/.7)] pt-3">
+              <p className="font-mono text-[8px] uppercase tracking-[.14em] text-[hsl(var(--accent))]">Demande envoyée</p>
+              <p className="mt-1 whitespace-pre-wrap text-[10px] leading-5 text-[hsl(var(--muted-foreground))]">{request.content}</p>
+              {response && <>
+                <p className="mt-3 font-mono text-[8px] uppercase tracking-[.14em] text-[hsl(var(--primary))]">Réponse de l’assistant</p>
+                <p className="mt-1 whitespace-pre-wrap text-[10px] leading-5 text-[hsl(var(--muted-foreground))]">{response.content}</p>
+              </>}
+            </div>
+          </details>
+        )) : (
+          <div className="rounded-xl border border-dashed border-[hsl(var(--border))] px-3 py-6 text-center">
+            <History className="mx-auto size-5 text-[hsl(var(--muted-foreground))]" />
+            <p className="mt-2 text-[10px] leading-5 text-[hsl(var(--muted-foreground))]">Les demandes et réponses de l’assistant apparaîtront ici.</p>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 export default function Home() {
   const queryClient = useQueryClient();
-  const { user, isLoading: isAuthLoading, isAuthenticated, login, logout } = useAuth();
+  const { user, authMethod, isLoading: isAuthLoading, isAuthenticated, login, logout, refresh: refreshAuth } = useAuth();
   const workspaceId = useMemo(() => user?.id ?? getWorkspaceId(), [user?.id]);
+  const [authDialogOpen, setAuthDialogOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('register');
+  const [authUsername, setAuthUsername] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [chatInput, setChatInput] = useState('');
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('preview');
@@ -496,8 +562,13 @@ export default function Home() {
   const [isShellRunning, setIsShellRunning] = useState(false);
   const [versions, setVersions] = useState<Array<{ id: number; html: string; label: string; createdAt: string }>>([]);
   const [selectedVersionId, setSelectedVersionId] = useState('');
+  const [editedCode, setEditedCode] = useState('');
+  const [hasUnsavedCode, setHasUnsavedCode] = useState(false);
+  const [isSavingCode, setIsSavingCode] = useState(false);
+  const [assistantView, setAssistantView] = useState<'chat' | 'activity'>('chat');
+  const previousUserId = useRef<string | null>(null);
 
-  const projectsQuery = useListProjects({ workspaceId });
+  const projectsQuery = useListProjects({ workspaceId }, { query: { queryKey: getListProjectsQueryKey({ workspaceId }), enabled: isAuthenticated } });
   const activeProject = isAuthenticated ? projectsQuery.data?.find((project) => project.id === selectedProjectId) ?? null : null;
   const visibleProjects = isAuthenticated ? (projectsQuery.data ?? []) : [];
   const messagesQuery = useListProjectMessages(activeProject?.id ?? 0, {
@@ -520,12 +591,35 @@ export default function Home() {
   const error = generateMutation.error ?? createMutation.error ?? updateMutation.error ?? deleteMutation.error ?? chatMutation.error;
   const isPending = generateMutation.isPending || createMutation.isPending || updateMutation.isPending;
   const isChatPending = chatMutation.isPending;
-  const currentHtml = activeProject?.html ?? generatedHtml;
+  const currentHtml = hasUnsavedCode ? editedCode : activeProject?.html ?? generatedHtml;
   const hasResult = Boolean(currentHtml);
   const codeStats = useMemo(() => currentHtml ? { lines: currentHtml.split('\n').length, chars: currentHtml.length } : { lines: 0, chars: 0 }, [currentHtml]);
   const messages = messagesQuery.data ?? [];
   const memoryFiles = memoryFilesQuery.data ?? [];
   const aiCooldownActive = aiCooldownRemaining > 0;
+
+  useEffect(() => {
+    const nextUserId = user?.id ?? null;
+    if (previousUserId.current !== null && previousUserId.current !== nextUserId) {
+      setSelectedProjectId(null);
+      setGeneratedHtml(null);
+      setPrompt('');
+      setChatInput('');
+      setPromptAttachments([]);
+      setEditedCode('');
+      setHasUnsavedCode(false);
+      setVersions([]);
+      setToolPanel(null);
+      setSecurityReport(null);
+      setAssistantView('chat');
+    }
+    previousUserId.current = nextUserId;
+  }, [user?.id]);
+
+  useEffect(() => {
+    setEditedCode(activeProject?.html ?? generatedHtml ?? '');
+    setHasUnsavedCode(false);
+  }, [activeProject?.id, activeProject?.html, generatedHtml]);
 
   const armAiCooldown = (aiError: unknown) => {
     const seconds = getAiCooldownSeconds(aiError);
@@ -624,6 +718,7 @@ export default function Home() {
       if (event.key === 'Escape') {
         setCommandPaletteOpen(false);
         setCommandQuery('');
+        setAuthDialogOpen(false);
       }
     };
     window.addEventListener('keydown', handleShortcut);
@@ -703,13 +798,85 @@ export default function Home() {
 
   const invalidateProjects = () => queryClient.invalidateQueries({ queryKey: getListProjectsQueryKey({ workspaceId }) });
 
+  const openAuthDialog = () => {
+    setAuthError('');
+    setAuthDialogOpen(true);
+  };
+
+  const discardUnsavedCode = () => {
+    if (!hasUnsavedCode) return true;
+    const confirmed = window.confirm('Votre code n’est pas enregistré. Continuer et abandonner ces modifications ?');
+    if (!confirmed) return false;
+    setEditedCode(activeProject?.html ?? generatedHtml ?? '');
+    setHasUnsavedCode(false);
+    return true;
+  };
+
+  const handleLogout = async () => {
+    if (!discardUnsavedCode()) return;
+    try {
+      await logout();
+    } catch (logoutError) {
+      setAuthError(logoutError instanceof Error ? logoutError.message : 'La déconnexion a échoué.');
+      setAuthDialogOpen(true);
+    }
+  };
+
+  const handleAuthSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (isAuthSubmitting) return;
+    setIsAuthSubmitting(true);
+    setAuthError('');
+    try {
+      const response = await fetch(`/api/auth/${authMode === 'register' ? 'register' : 'password/login'}`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: authUsername, password: authPassword }),
+      });
+      const payload = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(payload.error || 'La connexion a échoué.');
+      await refreshAuth();
+      setAuthPassword('');
+      setAuthDialogOpen(false);
+      try {
+        const pendingPrompt = window.sessionStorage.getItem('code-me-pending-prompt');
+        if (pendingPrompt) {
+          setPrompt(pendingPrompt);
+          window.sessionStorage.removeItem('code-me-pending-prompt');
+        }
+      } catch {
+        // Session storage can be unavailable in privacy-restricted browsers.
+      }
+    } catch (submitError) {
+      setAuthError(submitError instanceof Error ? submitError.message : 'La connexion a échoué.');
+    } finally {
+      setIsAuthSubmitting(false);
+    }
+  };
+
+  const saveCodeEdits = () => {
+    if (!activeProject || !hasUnsavedCode || isSavingCode) return;
+    setIsSavingCode(true);
+    updateMutation.mutate({ id: activeProject.id, data: { workspaceId, html: editedCode } }, {
+      onSuccess: () => {
+        setHasUnsavedCode(false);
+        setGeneratedHtml(null);
+        setIsSavingCode(false);
+        invalidateProjects();
+      },
+      onError: () => setIsSavingCode(false),
+    });
+  };
+
   const handleGenerate = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const trimmedPrompt = prompt.trim();
     if (trimmedPrompt.length < 3 || isPending || aiCooldownActive) return;
+    if (!discardUnsavedCode()) return;
     if (!isAuthenticated) {
-      try { window.sessionStorage.setItem('code-me-pending-prompt', trimmedPrompt); } catch { /* continue to login */ }
-      login();
+      try { window.sessionStorage.setItem('code-me-pending-prompt', trimmedPrompt); } catch { /* continue to sign in */ }
+      openAuthDialog();
       return;
     }
     setActiveTab('preview');
@@ -734,9 +901,10 @@ export default function Home() {
 
   const handleNewProject = () => {
     if (!isAuthenticated) {
-      login();
+      openAuthDialog();
       return;
     }
+    if (!discardUnsavedCode()) return;
     createMutation.mutate({ data: { workspaceId, name: 'Nouveau projet', prompt: '', html: null } }, {
       onSuccess: (project) => {
         setSelectedProjectId(project.id);
@@ -759,7 +927,8 @@ export default function Home() {
   };
 
   const handleDelete = (project: Project) => {
-    if (!window.confirm(`Supprimer « ${project.name} » et sa conversation ?`)) return;
+    const unsavedWarning = hasUnsavedCode && selectedProjectId === project.id ? ' Le code non enregistré sera aussi perdu.' : '';
+    if (!window.confirm(`Supprimer « ${project.name} » et sa conversation ?${unsavedWarning}`)) return;
     deleteMutation.mutate({ id: project.id, data: { workspaceId } }, {
       onSuccess: () => {
         if (selectedProjectId === project.id) setSelectedProjectId(null);
@@ -770,6 +939,7 @@ export default function Home() {
 
   const sendChatMessage = (message: string) => {
     if (!activeProject || !message.trim() || isChatPending || aiCooldownActive) return false;
+    if (!discardUnsavedCode()) return false;
     chatMutation.mutate({ projectId: activeProject.id, data: { workspaceId, message: message.trim(), attachments: promptAttachments } }, {
       onSuccess: (result) => {
         setChatInput('');
@@ -787,7 +957,7 @@ export default function Home() {
     event.preventDefault();
     const message = chatInput.trim();
     if (!isAuthenticated) {
-      login();
+      openAuthDialog();
       return;
     }
     sendChatMessage(message);
@@ -798,7 +968,7 @@ export default function Home() {
       return { message: aiCooldownActive ? aiCooldownLabel : 'Attendez la fin de la demande en cours.', tone: 'warning' };
     }
     if (!isAuthenticated) {
-      login();
+      openAuthDialog();
       return { message: 'Connectez-vous pour utiliser cette action.', tone: 'warning' };
     }
 
@@ -857,6 +1027,7 @@ export default function Home() {
   const handleRestoreVersion = async (versionId: string | number = selectedVersionId) => {
     const normalizedVersionId = String(versionId);
     if (!activeProject || !normalizedVersionId) return;
+    if (!discardUnsavedCode()) return;
     const response = await fetch(`/api/projects/${activeProject.id}/versions/${normalizedVersionId}/restore`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -873,9 +1044,10 @@ export default function Home() {
   const handleToolboxAiAction = (action: ToolboxAiAction) => {
     if (!activeProject || isChatPending || aiCooldownActive) return;
     if (!isAuthenticated) {
-      login();
+      openAuthDialog();
       return;
     }
+    if (!discardUnsavedCode()) return;
     const prompts: Record<ToolboxAiAction, string> = {
       explain: 'Explique précisément la structure actuelle de cette application, les zones importantes du HTML, du CSS et du JavaScript, ainsi que les choix d’accessibilité. Ne modifie pas le projet : donne uniquement une explication pédagogique.',
       refactor: 'Refactorise le projet actuel sans changer son apparence ni ses fonctionnalités. Sépare les responsabilités, réduis les répétitions et améliore la lisibilité. Vérifie que le résultat reste autonome et fonctionnel.',
@@ -898,10 +1070,11 @@ export default function Home() {
 
   const handleFixPreview = () => {
     if (!isAuthenticated) {
-      login();
+      openAuthDialog();
       return;
     }
     if (!activeProject || (!previewError && !error) || isChatPending || aiCooldownActive) return;
+    if (!discardUnsavedCode()) return;
     const detectedError = previewError || getErrorMessage(error);
     const message = `Une erreur a été détectée dans le projet : "${detectedError}". Analyse le HTML actuel, corrige la cause sans supprimer les fonctionnalités existantes, puis explique précisément le correctif.`;
     chatMutation.mutate({ projectId: activeProject.id, data: { workspaceId, message, attachments: promptAttachments } }, {
@@ -918,9 +1091,10 @@ export default function Home() {
   const handleFixSecurity = () => {
     if (!securityReport?.findings.length || isFixingSecurity || isChatPending || aiCooldownActive) return;
     if (!isAuthenticated) {
-      login();
+      openAuthDialog();
       return;
     }
+    if (!discardUnsavedCode()) return;
     const findings = securityReport.findings.slice(0, 16).map((finding) =>
       `- [${finding.severity}] ${finding.title}${finding.line ? ` (ligne ${finding.line})` : ''}: ${finding.message} Correction attendue: ${finding.remediation}`,
     ).join('\n');
@@ -1003,7 +1177,7 @@ export default function Home() {
     <main className="min-h-[100dvh] bg-transparent text-[hsl(var(--foreground))]">
       <header className="flex h-[68px] items-center justify-between border-b border-[hsl(var(--border)/.75)] bg-[hsl(var(--background)/.72)] px-4 backdrop-blur-xl sm:px-7">
         <div className="flex items-center gap-7"><BrandMark /><div className="hidden h-5 w-px bg-[hsl(var(--border))] sm:block" /><div className="hidden items-center gap-2 text-[11px] text-[hsl(var(--muted-foreground))] sm:flex"><div className="size-1.5 rounded-full bg-[hsl(var(--primary))] shadow-[0_0_10px_hsl(var(--primary)/.7)]" /><span data-testid="status-workspace">Workspace personnel</span></div></div>
-        <div className="flex items-center gap-2"><button type="button" onClick={() => { setCommandPaletteOpen(true); setCommandQuery(''); }} className="hidden items-center gap-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card)/.45)] px-2.5 py-1.5 text-[10px] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/.35)] hover:text-[hsl(var(--foreground))] sm:inline-flex" data-testid="button-open-command-palette"><TerminalSquare className="size-3.5 text-[hsl(var(--accent))]" /><span>Commandes</span><kbd className="rounded border border-[hsl(var(--border))] px-1 font-mono text-[9px]">⌘K</kbd></button><div className="hidden items-center gap-2 rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--card)/.6)] px-3 py-1.5 font-mono text-[10px] text-[hsl(var(--muted-foreground))] sm:flex"><TerminalSquare className="size-3.5 text-[hsl(var(--accent))]" /> v0.5.0</div><button type="button" onClick={() => { setPrompt(activeProject?.prompt ?? ''); setChatInput(''); setActiveTab('preview'); }} className="group inline-flex items-center gap-2 rounded-lg border border-transparent px-3 py-2 text-[11px] text-[hsl(var(--muted-foreground))] transition-colors hover:border-[hsl(var(--border))] hover:bg-[hsl(var(--card)/.6)] hover:text-[hsl(var(--foreground))]" data-testid="button-reset-header"><RotateCcw className="size-3.5 transition-transform group-hover:-rotate-45" /><span className="hidden sm:inline">Réinitialiser</span></button></div>
+         <div className="flex items-center gap-2"><button type="button" onClick={() => { setCommandPaletteOpen(true); setCommandQuery(''); }} className="hidden items-center gap-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card)/.45)] px-2.5 py-1.5 text-[10px] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/.35)] hover:text-[hsl(var(--foreground))] sm:inline-flex" data-testid="button-open-command-palette"><TerminalSquare className="size-3.5 text-[hsl(var(--accent))]" /><span>Commandes</span><kbd className="rounded border border-[hsl(var(--border))] px-1 font-mono text-[9px]">⌘K</kbd></button><div className="hidden items-center gap-2 rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--card)/.6)] px-3 py-1.5 font-mono text-[10px] text-[hsl(var(--muted-foreground))] sm:flex"><TerminalSquare className="size-3.5 text-[hsl(var(--accent))]" /> v0.9.0</div><button type="button" onClick={() => { setPrompt(activeProject?.prompt ?? ''); setChatInput(''); setActiveTab('preview'); }} className="group inline-flex items-center gap-2 rounded-lg border border-transparent px-3 py-2 text-[11px] text-[hsl(var(--muted-foreground))] transition-colors hover:border-[hsl(var(--border))] hover:bg-[hsl(var(--card)/.6)] hover:text-[hsl(var(--foreground))]" data-testid="button-reset-header"><RotateCcw className="size-3.5 transition-transform group-hover:-rotate-45" /><span className="hidden sm:inline">Réinitialiser</span></button></div>
       </header>
        <div className="flex flex-wrap items-center gap-2 border-b border-[hsl(var(--border)/.65)] bg-[hsl(var(--background)/.35)] px-4 py-2.5 sm:px-7">
         <label htmlFor="context-attachments" className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card)/.45)] px-2.5 py-1.5 text-[10px] text-[hsl(var(--muted-foreground))] transition-colors hover:border-[hsl(var(--primary)/.45)] hover:text-[hsl(var(--foreground))]">
@@ -1054,18 +1228,18 @@ export default function Home() {
          <div className="flex items-center gap-2">
           {isAuthenticated ? (
             <>
-              <span className="hidden text-[10px] text-[hsl(var(--muted-foreground))] sm:inline">{user?.firstName || user?.email || 'Compte connecté'}</span>
-              <button type="button" onClick={logout} className="rounded-md border border-[hsl(var(--border))] px-2.5 py-1.5 text-[10px] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">Se déconnecter</button>
+               <span className="hidden text-[10px] text-[hsl(var(--muted-foreground))] sm:inline">{user?.username || user?.firstName || user?.email || 'Compte connecté'}{authMethod === 'replit' ? ' · Replit' : ''}</span>
+              <button type="button" onClick={handleLogout} className="rounded-md border border-[hsl(var(--border))] px-2.5 py-1.5 text-[10px] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">Se déconnecter</button>
             </>
           ) : (
-             <button type="button" onClick={login} className="rounded-md border border-[hsl(var(--primary)/.35)] bg-[hsl(var(--primary)/.08)] px-2.5 py-1.5 text-[10px] font-medium text-[hsl(var(--primary))]">Créer un compte / Se connecter</button>
+             <button type="button" onClick={openAuthDialog} className="rounded-md border border-[hsl(var(--primary)/.35)] bg-[hsl(var(--primary)/.08)] px-2.5 py-1.5 text-[10px] font-medium text-[hsl(var(--primary))]">Créer un compte / Se connecter</button>
           )}
         </div>
 
        {!isAuthLoading && !isAuthenticated && <div className="border-b border-amber-300/20 bg-amber-300/[.06] px-4 py-3 sm:px-7" role="status" data-testid="banner-auth-required">
          <div className="mx-auto flex max-w-[1900px] flex-wrap items-center justify-between gap-3">
-           <div className="flex items-start gap-2.5"><AlertCircle className="mt-0.5 size-4 shrink-0 text-amber-200" /><div><p className="text-[11px] font-medium text-amber-100">Créez un compte pour conserver vos projets et votre code</p><p className="mt-1 text-[10px] leading-5 text-amber-100/65">La connexion est requise avant la création ou la sauvegarde. Le compte est créé automatiquement lors de votre première connexion.</p></div></div>
-           <button type="button" onClick={login} className="rounded-lg border border-amber-200/30 bg-amber-200/10 px-3 py-2 text-[10px] font-semibold text-amber-100 hover:bg-amber-200/15">Créer un compte / Se connecter</button>
+           <div className="flex items-start gap-2.5"><AlertCircle className="mt-0.5 size-4 shrink-0 text-amber-200" /><div><p className="text-[11px] font-medium text-amber-100">Créez un compte pour conserver vos projets et votre code</p><p className="mt-1 text-[10px] leading-5 text-amber-100/65">Connectez-vous avec un pseudo Code Me, ou choisissez Replit si vous préférez.</p></div></div>
+           <button type="button" onClick={openAuthDialog} className="rounded-lg border border-amber-200/30 bg-amber-200/10 px-3 py-2 text-[10px] font-semibold text-amber-100 hover:bg-amber-200/15">Créer un compte / Se connecter</button>
          </div>
        </div>}
       </div>
@@ -1103,7 +1277,7 @@ export default function Home() {
       <div className="mx-auto grid max-w-[1900px] grid-cols-1 lg:grid-cols-[238px_315px_minmax(0,1fr)_330px]">
         <aside className="border-b border-[hsl(var(--border)/.8)] bg-[hsl(var(--sidebar)/.7)] p-4 sm:p-6 lg:min-h-[calc(100dvh-68px)] lg:border-b-0 lg:border-r lg:p-5">
           <div className="mb-6 flex items-center justify-between"><div><p className="font-mono text-[9px] uppercase tracking-[0.2em] text-[hsl(var(--muted-foreground))]">Workspace</p><h1 className="mt-1.5 text-[16px] font-medium tracking-[-0.04em]">Projets</h1></div><button type="button" onClick={handleNewProject} disabled={createMutation.isPending} className="grid size-8 place-items-center rounded-lg border border-[hsl(var(--primary)/.3)] bg-[hsl(var(--primary)/.09)] text-[hsl(var(--primary))] transition-colors hover:bg-[hsl(var(--primary)/.16)] disabled:opacity-50]" aria-label="Créer un projet" data-testid="button-new-project"><Plus className="size-4" /></button></div>
-           {projectsQuery.isLoading && isAuthenticated ? <div className="space-y-2"><div className="pulse-line h-8 rounded-lg bg-[hsl(var(--muted)/.5)]" /><div className="pulse-line h-8 rounded-lg bg-[hsl(var(--muted)/.35)]" /></div> : visibleProjects.length ? <div className="space-y-1">{visibleProjects.map((project) => <ProjectRow key={project.id} project={project} active={project.id === selectedProjectId} renaming={project.id === renamingId} renameValue={renameValue} onSelect={() => setSelectedProjectId(project.id)} onStartRename={() => { setRenamingId(project.id); setRenameValue(project.name); }} onRenameChange={setRenameValue} onRenameKeyDown={handleRenameKeyDown} onDelete={() => handleDelete(project)} />)}</div> : <div className="rounded-xl border border-dashed border-[hsl(var(--border))] px-3 py-5 text-center"><Layers3 className="mx-auto size-5 text-[hsl(var(--muted-foreground))]" /><p className="mt-2 text-[11px] leading-5 text-[hsl(var(--muted-foreground))]">{isAuthenticated ? 'Aucun projet sauvegardé.' : 'Connectez-vous pour créer et conserver vos projets.'}</p><button type="button" onClick={handleNewProject} className="mt-3 text-[11px] font-medium text-[hsl(var(--primary))] hover:underline">{isAuthenticated ? 'Créer maintenant' : 'Créer un compte / Se connecter'}</button></div>}
+           {projectsQuery.isLoading && isAuthenticated ? <div className="space-y-2"><div className="pulse-line h-8 rounded-lg bg-[hsl(var(--muted)/.5)]" /><div className="pulse-line h-8 rounded-lg bg-[hsl(var(--muted)/.35)]" /></div> : visibleProjects.length ? <div className="space-y-1">{visibleProjects.map((project) => <ProjectRow key={project.id} project={project} active={project.id === selectedProjectId} renaming={project.id === renamingId} renameValue={renameValue} onSelect={() => { if (discardUnsavedCode()) setSelectedProjectId(project.id); }} onStartRename={() => { setRenamingId(project.id); setRenameValue(project.name); }} onRenameChange={setRenameValue} onRenameKeyDown={handleRenameKeyDown} onDelete={() => handleDelete(project)} />)}</div> : <div className="rounded-xl border border-dashed border-[hsl(var(--border))] px-3 py-5 text-center"><Layers3 className="mx-auto size-5 text-[hsl(var(--muted-foreground))]" /><p className="mt-2 text-[11px] leading-5 text-[hsl(var(--muted-foreground))]">{isAuthenticated ? 'Aucun projet sauvegardé.' : 'Connectez-vous pour créer et conserver vos projets.'}</p><button type="button" onClick={handleNewProject} className="mt-3 text-[11px] font-medium text-[hsl(var(--primary))] hover:underline">{isAuthenticated ? 'Créer maintenant' : 'Créer un compte / Se connecter'}</button></div>}
           <div className="mt-8 border-t border-[hsl(var(--border)/.75)] pt-5"><p className="font-mono text-[9px] uppercase tracking-[0.18em] text-[hsl(var(--muted-foreground))]">Pistes de départ</p><div className="mt-3 space-y-1">{starterPrompts.map((starter) => <button type="button" key={starter.title} onClick={() => setPrompt(starter.prompt)} className="group flex w-full items-start gap-2.5 rounded-lg px-2 py-2 text-left transition-colors hover:bg-[hsl(var(--card)/.75)]"><span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-[hsl(var(--border))] group-hover:bg-[hsl(var(--primary))]" /><span className="text-[11px] leading-5 text-[hsl(var(--muted-foreground))] group-hover:text-[hsl(var(--foreground))]">{starter.title}</span></button>)}</div></div>
         </aside>
 
@@ -1115,14 +1289,39 @@ export default function Home() {
 
         <section className="min-w-0 p-4 sm:p-6 lg:p-7">
           <div className="studio-enter mb-5 flex flex-wrap items-end justify-between gap-4"><div><p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[hsl(var(--muted-foreground))]">02 / Workspace</p><h2 className="mt-2 text-[23px] font-medium tracking-[-0.045em] sm:text-[27px]">{activeProject?.name || 'Aperçu de votre application'}</h2></div><div className="flex items-center gap-2 rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--card)/.48)] px-3 py-1.5 text-[10px] text-[hsl(var(--muted-foreground))]" data-testid="status-generation"><span className={`size-1.5 rounded-full ${isPending || isChatPending ? 'animate-pulse bg-[hsl(var(--chart-3))]' : hasResult ? 'bg-[hsl(var(--primary))]' : 'bg-[hsl(var(--muted-foreground))]'}`} />{statusLabel}</div></div>
-          <div className="studio-enter overflow-hidden rounded-2xl border border-[hsl(var(--border)/.9)] bg-[hsl(var(--card)/.68)] shadow-[0_24px_70px_hsl(225_32%_3%/.25)]"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-[hsl(var(--border))] bg-[hsl(var(--background)/.34)] px-3 py-2.5 sm:px-4"><div className="flex items-center gap-1 rounded-lg bg-[hsl(var(--secondary)/.7)] p-1"><button type="button" onClick={() => setActiveTab('preview')} className={`inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-[11px] transition-all ${activeTab === 'preview' ? 'bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm' : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'}`} data-testid="tab-live-preview"><Monitor className="size-3.5" /> Aperçu <span className="text-[hsl(var(--primary))]">Live</span></button><button type="button" onClick={() => setActiveTab('code')} disabled={!hasResult} className={`inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-[11px] transition-all disabled:cursor-not-allowed disabled:opacity-35 ${activeTab === 'code' ? 'bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm' : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'}`} data-testid="tab-source-code"><Code2 className="size-3.5" /> Code source</button></div>{hasResult && <div className="flex items-center gap-2"><span className="hidden font-mono text-[10px] text-[hsl(var(--muted-foreground))] sm:inline">{codeStats.lines} lignes · {codeStats.chars.toLocaleString('fr-FR')} car.</span><button type="button" onClick={handleCopy} className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(var(--border))] px-2.5 py-1.5 text-[10px] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--secondary))] hover:text-[hsl(var(--foreground))]" data-testid="button-copy-source">{copied ? <Check className="size-3.5 text-[hsl(var(--primary))]" /> : <Copy className="size-3.5" />}{copied ? 'Copié' : 'Copier'}</button><button type="button" onClick={handleDownload} disabled={isDownloading} className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(var(--primary)/.28)] bg-[hsl(var(--primary)/.08)] px-2.5 py-1.5 text-[10px] text-[hsl(var(--primary))] disabled:opacity-60" data-testid="button-download-project"><Download className={`size-3.5 ${isDownloading ? 'animate-bounce' : ''}`} />{isDownloading ? 'Préparation...' : 'Télécharger le ZIP'}</button></div>}</div><div className="preview-scroll flex min-h-[480px] flex-col sm:min-h-[560px]">{activeTab === 'preview' && (isPending || isChatPending ? <LoadingPreview /> : currentHtml ? <iframe key={previewNonce} title="Aperçu de l’application générée" srcDoc={currentHtml} sandbox="allow-scripts allow-forms allow-modals" className="min-h-[480px] w-full flex-1 border-0 bg-[#f8fafc] sm:min-h-[560px]" data-testid="iframe-live-preview" /> : <EmptyPreview onTryPrompt={setPrompt} />)}{activeTab === 'code' && currentHtml && <pre className="code-scroll min-h-[480px] flex-1 overflow-auto bg-[hsl(228_35%_7%/.72)] p-4 font-mono text-[11px] leading-[1.75] text-[hsl(210_27%_82%)] sm:min-h-[560px] sm:p-6" data-testid="content-source-code"><code>{currentHtml}</code></pre>}</div></div><div className="mt-4 flex flex-wrap items-center justify-between gap-3 px-1 text-[10px] text-[hsl(var(--muted-foreground))]"><div className="flex items-center gap-2"><Globe2 className="size-3.5 text-[hsl(var(--primary)/.8)]" /><span>Le preview tourne dans un environnement isolé.</span></div>{hasResult && <div className="flex items-center gap-1.5 font-mono"><FileCode2 className="size-3.5" /> single-file output</div>}</div>
+          <div className="studio-enter overflow-hidden rounded-2xl border border-[hsl(var(--border)/.9)] bg-[hsl(var(--card)/.68)] shadow-[0_24px_70px_hsl(225_32%_3%/.25)]"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-[hsl(var(--border))] bg-[hsl(var(--background)/.34)] px-3 py-2.5 sm:px-4"><div className="flex items-center gap-1 rounded-lg bg-[hsl(var(--secondary)/.7)] p-1"><button type="button" onClick={() => setActiveTab('preview')} className={`inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-[11px] transition-all ${activeTab === 'preview' ? 'bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm' : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'}`} data-testid="tab-live-preview"><Monitor className="size-3.5" /> Aperçu <span className="text-[hsl(var(--primary))]">Live</span></button><button type="button" onClick={() => setActiveTab('code')} disabled={!hasResult} className={`inline-flex items-center gap-2 rounded-md px-3 py-1.5 text-[11px] transition-all disabled:cursor-not-allowed disabled:opacity-35 ${activeTab === 'code' ? 'bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-sm' : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'}`} data-testid="tab-source-code"><Code2 className="size-3.5" /> Code source</button></div>{hasResult && <div className="flex items-center gap-2"><span className="hidden font-mono text-[10px] text-[hsl(var(--muted-foreground))] sm:inline">{codeStats.lines} lignes · {codeStats.chars.toLocaleString('fr-FR')} car.</span>{activeTab === 'code' && activeProject && <button type="button" onClick={saveCodeEdits} disabled={!hasUnsavedCode || isSavingCode} className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(var(--primary)/.3)] bg-[hsl(var(--primary)/.08)] px-2.5 py-1.5 text-[10px] text-[hsl(var(--primary))] disabled:opacity-50" data-testid="button-save-code">{isSavingCode ? <Loader2 className="size-3 animate-spin" /> : hasUnsavedCode ? <Check className="size-3" /> : <Check className="size-3" />}{isSavingCode ? 'Enregistrement…' : hasUnsavedCode ? 'Enregistrer' : 'Enregistré'}</button>}<button type="button" onClick={handleCopy} className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(var(--border))] px-2.5 py-1.5 text-[10px] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--secondary))] hover:text-[hsl(var(--foreground))]" data-testid="button-copy-source">{copied ? <Check className="size-3.5 text-[hsl(var(--primary))]" /> : <Copy className="size-3.5" />}{copied ? 'Copié' : 'Copier'}</button><button type="button" onClick={handleDownload} disabled={isDownloading} className="inline-flex items-center gap-1.5 rounded-md border border-[hsl(var(--primary)/.28)] bg-[hsl(var(--primary)/.08)] px-2.5 py-1.5 text-[10px] text-[hsl(var(--primary))] disabled:opacity-60" data-testid="button-download-project"><Download className={`size-3.5 ${isDownloading ? 'animate-bounce' : ''}`} />{isDownloading ? 'Préparation...' : 'Télécharger le ZIP'}</button></div>}</div><div className="preview-scroll flex min-h-[480px] flex-col sm:min-h-[560px]">{activeTab === 'preview' && (isPending || isChatPending ? <LoadingPreview /> : currentHtml ? <iframe key={previewNonce} title="Aperçu de l’application générée" srcDoc={currentHtml} sandbox="allow-scripts allow-forms allow-modals" className="min-h-[480px] w-full flex-1 border-0 bg-[#f8fafc] sm:min-h-[560px]" data-testid="iframe-live-preview" /> : <EmptyPreview onTryPrompt={setPrompt} />)}{activeTab === 'code' && currentHtml && <textarea value={editedCode} onChange={(event) => { setEditedCode(event.target.value); setHasUnsavedCode(true); }} onKeyDown={(event) => { if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') { event.preventDefault(); saveCodeEdits(); } }} spellCheck={false} wrap="off" aria-label="Modifier le code HTML" className="code-scroll min-h-[480px] flex-1 resize-none overflow-auto bg-[hsl(228_35%_7%/.72)] p-4 font-mono text-[11px] leading-[1.75] text-[hsl(210_27%_82%)] outline-none focus:ring-2 focus:ring-inset focus:ring-[hsl(var(--primary)/.3)] sm:min-h-[560px] sm:p-6" data-testid="content-source-code" />}</div></div><div className="mt-4 flex flex-wrap items-center justify-between gap-3 px-1 text-[10px] text-[hsl(var(--muted-foreground))]"><div className="flex items-center gap-2"><Globe2 className="size-3.5 text-[hsl(var(--primary)/.8)]" /><span>Le preview tourne dans un environnement isolé.</span></div>{hasResult && <div className="flex items-center gap-1.5 font-mono"><FileCode2 className="size-3.5" /> single-file output</div>}</div>
         </section>
 
         <aside className="flex min-h-[560px] flex-col border-t border-[hsl(var(--border)/.8)] bg-[hsl(var(--sidebar)/.48)] p-4 sm:p-6 lg:min-h-[calc(100dvh-68px)] lg:border-l lg:border-t-0 lg:p-5">
-          <div className="mb-4 flex items-center justify-between"><div><p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[hsl(var(--accent))]">03 / Assistant</p><h2 className="mt-2 text-[19px] font-medium tracking-[-0.04em]">Améliorer le projet</h2></div><div className="grid size-8 place-items-center rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card)/.6)] text-[hsl(var(--accent))]"><Sparkles className="size-4" /></div></div>
-      {!activeProject ? <div className="flex flex-1 flex-col items-center justify-center px-4 text-center"><MessageCircle className="size-7 text-[hsl(var(--muted-foreground))]" /><p className="mt-3 text-[12px] font-medium">Sélectionnez un projet</p><p className="mt-2 text-[11px] leading-5 text-[hsl(var(--muted-foreground))]">L’assistant pourra ensuite modifier votre application en gardant tout l’historique.</p></div> : <><div className="chat-scroll flex-1 space-y-4 overflow-y-auto pr-1">{messagesQuery.isLoading ? <div className="space-y-3"><div className="h-14 rounded-2xl bg-[hsl(var(--muted)/.4)]" /><div className="ml-auto h-12 w-4/5 rounded-2xl bg-[hsl(var(--muted)/.3)]" /></div> : messages.length ? messages.map((message) => <ChatBubble key={message.id} message={message} onAction={handleMessageAction} />) : <div className="rounded-xl border border-dashed border-[hsl(var(--border))] px-3 py-5 text-center"><Sparkles className="mx-auto size-5 text-[hsl(var(--accent))]" /><p className="mt-2 text-[11px] leading-5 text-[hsl(var(--muted-foreground))]">Demandez une modification, une nouvelle section ou une amélioration visuelle.</p></div>}{isChatPending && <div className="flex items-center gap-2 text-[11px] text-[hsl(var(--muted-foreground))]"><Loader2 className="size-3.5 animate-spin text-[hsl(var(--accent))]" /> Analyse du projet en cours...</div>}{aiCooldownActive && <div className="rounded-lg border border-amber-300/25 bg-amber-300/[.06] px-3 py-2 text-[10px] leading-4 text-amber-100" role="status">Les actions IA sont suspendues pendant {aiCooldownRemaining} seconde{aiCooldownRemaining > 1 ? 's' : ''} pour éviter une nouvelle erreur de quota.</div>}</div><form onSubmit={handleSendChat} className="mt-4 border-t border-[hsl(var(--border)/.8)] pt-4"><div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background)/.55)] focus-within:border-[hsl(var(--accent)/.65)]"><textarea value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder={aiCooldownActive ? `IA indisponible pendant ${aiCooldownRemaining}s` : 'Ex: ajoute un mode sombre et une animation d’entrée...'} rows={3} maxLength={10000} disabled={isChatPending || aiCooldownActive} className="block w-full resize-none bg-transparent px-3.5 py-3 text-[12px] leading-5 text-[hsl(var(--foreground))] outline-none placeholder:text-[hsl(var(--muted-foreground)/.7)] disabled:cursor-not-allowed" data-testid="input-project-chat" /><div className="flex items-center justify-between border-t border-[hsl(var(--border)/.65)] px-3 py-2"><span className="text-[10px] text-[hsl(var(--muted-foreground))]">{aiCooldownActive ? aiCooldownLabel : 'L’historique est sauvegardé'}</span><button type="submit" disabled={!chatInput.trim() || isChatPending || aiCooldownActive} className="inline-flex items-center gap-1.5 rounded-lg bg-[hsl(var(--accent))] px-2.5 py-1.5 text-[10px] font-semibold text-[hsl(var(--accent-foreground))] disabled:cursor-not-allowed disabled:opacity-40" data-testid="button-send-project-chat">{isChatPending ? <Loader2 className="size-3 animate-spin" /> : <Send className="size-3" />} {aiCooldownActive ? `${aiCooldownRemaining}s` : 'Envoyer'}</button></div></div></form></>}
+          <div className="mb-4 flex items-center justify-between gap-3"><div><p className="font-mono text-[10px] uppercase tracking-[0.22em] text-[hsl(var(--accent))]">03 / Assistant</p><h2 className="mt-2 text-[19px] font-medium tracking-[-0.04em]">Améliorer le projet</h2></div><div className="inline-flex items-center rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card)/.6)] p-0.5"><button type="button" onClick={() => setAssistantView('chat')} aria-pressed={assistantView === 'chat'} className={`inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-[9px] ${assistantView === 'chat' ? 'bg-[hsl(var(--primary)/.12)] text-[hsl(var(--primary))]' : 'text-[hsl(var(--muted-foreground))]'}`}><Sparkles className="size-3" />Chat</button><button type="button" onClick={() => setAssistantView('activity')} aria-pressed={assistantView === 'activity'} className={`inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-[9px] ${assistantView === 'activity' ? 'bg-[hsl(var(--accent)/.12)] text-[hsl(var(--accent))]' : 'text-[hsl(var(--muted-foreground))]'}`} data-testid="button-ai-activity"><History className="size-3" />Journal</button></div></div>
+      {!activeProject ? <div className="flex flex-1 flex-col items-center justify-center px-4 text-center"><MessageCircle className="size-7 text-[hsl(var(--muted-foreground))]" /><p className="mt-3 text-[12px] font-medium">Sélectionnez un projet</p><p className="mt-2 text-[11px] leading-5 text-[hsl(var(--muted-foreground))]">L’assistant pourra ensuite modifier votre application en gardant tout l’historique.</p></div> : assistantView === 'activity' ? <AiActivityLog messages={messages} isLoading={messagesQuery.isLoading} isPending={isChatPending} /> : <><div className="chat-scroll flex-1 space-y-4 overflow-y-auto pr-1">{messagesQuery.isLoading ? <div className="space-y-3"><div className="h-14 rounded-2xl bg-[hsl(var(--muted)/.4)]" /><div className="ml-auto h-12 w-4/5 rounded-2xl bg-[hsl(var(--muted)/.3)]" /></div> : messages.length ? messages.map((message) => <ChatBubble key={message.id} message={message} onAction={handleMessageAction} />) : <div className="rounded-xl border border-dashed border-[hsl(var(--border))] px-3 py-5 text-center"><Sparkles className="mx-auto size-5 text-[hsl(var(--accent))]" /><p className="mt-2 text-[11px] leading-5 text-[hsl(var(--muted-foreground))]">Demandez une modification, une nouvelle section ou une amélioration visuelle.</p></div>}{isChatPending && <div className="flex items-center gap-2 text-[11px] text-[hsl(var(--muted-foreground))]"><Loader2 className="size-3.5 animate-spin text-[hsl(var(--accent))]" /> Analyse du projet en cours...</div>}{aiCooldownActive && <div className="rounded-lg border border-amber-300/25 bg-amber-300/[.06] px-3 py-2 text-[10px] leading-4 text-amber-100" role="status">Les actions IA sont suspendues pendant {aiCooldownRemaining} seconde{aiCooldownRemaining > 1 ? 's' : ''} pour éviter une nouvelle erreur de quota.</div>}</div><form onSubmit={handleSendChat} className="mt-4 border-t border-[hsl(var(--border)/.8)] pt-4"><div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background)/.55)] focus-within:border-[hsl(var(--accent)/.65)]"><textarea value={chatInput} onChange={(event) => setChatInput(event.target.value)} placeholder={aiCooldownActive ? `IA indisponible pendant ${aiCooldownRemaining}s` : 'Ex: ajoute un mode sombre et une animation d’entrée...'} rows={3} maxLength={10000} disabled={isChatPending || aiCooldownActive} className="block w-full resize-none bg-transparent px-3.5 py-3 text-[12px] leading-5 text-[hsl(var(--foreground))] outline-none placeholder:text-[hsl(var(--muted-foreground)/.7)] disabled:cursor-not-allowed" data-testid="input-project-chat" /><div className="flex items-center justify-between border-t border-[hsl(var(--border)/.65)] px-3 py-2"><span className="text-[10px] text-[hsl(var(--muted-foreground))]">{aiCooldownActive ? aiCooldownLabel : 'L’historique est sauvegardé'}</span><button type="submit" disabled={!chatInput.trim() || isChatPending || aiCooldownActive} className="inline-flex items-center gap-1.5 rounded-lg bg-[hsl(var(--accent))] px-2.5 py-1.5 text-[10px] font-semibold text-[hsl(var(--accent-foreground))] disabled:cursor-not-allowed disabled:opacity-40" data-testid="button-send-project-chat">{isChatPending ? <Loader2 className="size-3 animate-spin" /> : <Send className="size-3" />} {aiCooldownActive ? `${aiCooldownRemaining}s` : 'Envoyer'}</button></div></div></form></>}
         </aside>
       </div>
+      {authDialogOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 px-4 py-8 backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setAuthDialogOpen(false); }} data-testid="auth-dialog-overlay">
+        <section className="w-full max-w-md rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5 shadow-[0_30px_90px_hsl(225_32%_3%/.7)] sm:p-6" role="dialog" aria-modal="true" aria-labelledby="auth-dialog-title" data-testid="auth-dialog">
+          <div className="flex items-start justify-between gap-4">
+            <div><p className="font-mono text-[9px] uppercase tracking-[.2em] text-[hsl(var(--primary))]">Code Me · compte personnel</p><h2 id="auth-dialog-title" className="mt-2 text-[20px] font-medium tracking-[-.03em]">{authMode === 'register' ? 'Créer un compte' : 'Se connecter'}</h2></div>
+            <button type="button" onClick={() => setAuthDialogOpen(false)} className="rounded-md border border-[hsl(var(--border))] px-2 py-1 text-[11px] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">Fermer</button>
+          </div>
+          <div className="mt-5 grid grid-cols-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background)/.45)] p-1">
+            <button type="button" onClick={() => { setAuthMode('register'); setAuthError(''); }} aria-pressed={authMode === 'register'} className={`rounded-md px-3 py-2 text-[11px] ${authMode === 'register' ? 'bg-[hsl(var(--primary)/.12)] font-medium text-[hsl(var(--primary))]' : 'text-[hsl(var(--muted-foreground))]'}`}>Créer un compte</button>
+            <button type="button" onClick={() => { setAuthMode('login'); setAuthError(''); }} aria-pressed={authMode === 'login'} className={`rounded-md px-3 py-2 text-[11px] ${authMode === 'login' ? 'bg-[hsl(var(--primary)/.12)] font-medium text-[hsl(var(--primary))]' : 'text-[hsl(var(--muted-foreground))]'}`}>Connexion</button>
+          </div>
+          <form className="mt-5 space-y-4" onSubmit={handleAuthSubmit}>
+            <label className="block text-[11px] font-medium">Pseudo
+              <input autoComplete="username" required minLength={3} maxLength={32} pattern="[A-Za-z0-9][A-Za-z0-9._-]*" value={authUsername} onChange={(event) => setAuthUsername(event.target.value)} className="mt-2 block w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background)/.65)] px-3 py-2.5 text-[12px] outline-none focus:border-[hsl(var(--primary)/.65)]" placeholder="ex. lois.dev" data-testid="input-auth-username" />
+            </label>
+            <label className="block text-[11px] font-medium">Mot de passe
+              <input type="password" autoComplete={authMode === 'register' ? 'new-password' : 'current-password'} required minLength={8} maxLength={128} value={authPassword} onChange={(event) => setAuthPassword(event.target.value)} className="mt-2 block w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background)/.65)] px-3 py-2.5 text-[12px] outline-none focus:border-[hsl(var(--primary)/.65)]" placeholder="8 caractères minimum" data-testid="input-auth-password" />
+            </label>
+            {authError && <p className="rounded-lg border border-[hsl(var(--destructive)/.3)] bg-[hsl(var(--destructive)/.08)] px-3 py-2.5 text-[11px] leading-5 text-[hsl(var(--destructive))]" role="alert">{authError}</p>}
+            {authMode === 'register' && <p className="text-[10px] leading-5 text-[hsl(var(--muted-foreground))]">Aucun e-mail n’est demandé. La récupération du mot de passe n’est pas encore disponible : conserve bien ton mot de passe.</p>}
+            <button type="submit" disabled={isAuthSubmitting} className="flex w-full items-center justify-center gap-2 rounded-lg bg-[hsl(var(--primary))] px-4 py-2.5 text-[11px] font-semibold text-[hsl(var(--primary-foreground))] disabled:cursor-wait disabled:opacity-60" data-testid="button-auth-submit">{isAuthSubmitting && <Loader2 className="size-3.5 animate-spin" />}{authMode === 'register' ? 'Créer mon compte' : 'Se connecter'}</button>
+          </form>
+          <div className="my-4 flex items-center gap-3 text-[9px] uppercase tracking-[.14em] text-[hsl(var(--muted-foreground))]"><span className="h-px flex-1 bg-[hsl(var(--border))]" />ou<span className="h-px flex-1 bg-[hsl(var(--border))]" /></div>
+          <button type="button" onClick={login} className="w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background)/.45)] px-4 py-2.5 text-[11px] font-medium text-[hsl(var(--foreground))] transition-colors hover:border-[hsl(var(--primary)/.4)] hover:bg-[hsl(var(--secondary))]" data-testid="button-login-replit">Continuer avec Replit (facultatif)</button>
+        </section>
+      </div>}
       {commandPaletteOpen && <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 px-4 pt-[12vh] backdrop-blur-sm" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setCommandPaletteOpen(false); }} data-testid="command-palette-overlay">
         <section className="w-full max-w-xl overflow-hidden rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-[0_30px_90px_hsl(225_32%_3%/.65)]" role="dialog" aria-modal="true" aria-labelledby="command-palette-title" data-testid="command-palette">
           <div className="flex items-center gap-3 border-b border-[hsl(var(--border))] px-4 py-3">

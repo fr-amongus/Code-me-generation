@@ -6,11 +6,14 @@ import * as client from 'openid-client';
 
 export type AuthUser = {
   id: string;
+  username: string | null;
   email: string | null;
   firstName: string | null;
   lastName: string | null;
   profileImageUrl: string | null;
 };
+
+export type AuthMethod = 'password' | 'replit';
 
 export const ISSUER_URL = process.env.ISSUER_URL ?? 'https://replit.com/oidc';
 export const SESSION_COOKIE = 'sid';
@@ -18,9 +21,57 @@ export const SESSION_TTL = 7 * 24 * 60 * 60 * 1000;
 
 export interface SessionData {
   user: AuthUser;
-  access_token: string;
+  provider?: AuthMethod;
+  access_token?: string;
   refresh_token?: string;
   expires_at?: number;
+}
+
+const PASSWORD_SCRYPT_N = 16_384;
+const PASSWORD_SCRYPT_R = 8;
+const PASSWORD_SCRYPT_P = 1;
+const PASSWORD_HASH_BYTES = 64;
+
+function derivePasswordHash(password: string, salt: Buffer): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    crypto.scrypt(
+      password,
+      salt,
+      PASSWORD_HASH_BYTES,
+      { N: PASSWORD_SCRYPT_N, r: PASSWORD_SCRYPT_R, p: PASSWORD_SCRYPT_P, maxmem: 64 * 1024 * 1024 },
+      (error, derivedKey) => error ? reject(error) : resolve(derivedKey),
+    );
+  });
+}
+
+export async function hashPassword(password: string): Promise<string> {
+  const salt = crypto.randomBytes(16);
+  const hash = await derivePasswordHash(password, salt);
+  return `scrypt$${PASSWORD_SCRYPT_N}$${PASSWORD_SCRYPT_R}$${PASSWORD_SCRYPT_P}$${salt.toString('base64url')}$${hash.toString('base64url')}`;
+}
+
+export async function verifyPassword(password: string, encoded: string | null): Promise<boolean> {
+  if (!encoded) return false;
+  const [algorithm, n, r, p, saltText, hashText, extra] = encoded.split('$');
+  if (
+    extra !== undefined ||
+    algorithm !== 'scrypt' ||
+    Number(n) !== PASSWORD_SCRYPT_N ||
+    Number(r) !== PASSWORD_SCRYPT_R ||
+    Number(p) !== PASSWORD_SCRYPT_P ||
+    !saltText ||
+    !hashText
+  ) return false;
+
+  try {
+    const salt = Buffer.from(saltText, 'base64url');
+    const expected = Buffer.from(hashText, 'base64url');
+    if (salt.length !== 16 || expected.length !== PASSWORD_HASH_BYTES) return false;
+    const actual = await derivePasswordHash(password, salt);
+    return crypto.timingSafeEqual(actual, expected);
+  } catch {
+    return false;
+  }
 }
 
 let oidcConfig: client.Configuration | null = null;

@@ -7,6 +7,7 @@ import {
   getSession,
   getSessionId,
   updateSession,
+  type AuthMethod,
   type SessionData,
 } from '../lib/auth';
 import type { AuthUser } from '../lib/auth';
@@ -19,6 +20,7 @@ declare global {
       isAuthenticated(): this is AuthedRequest;
 
       user?: User | undefined;
+      authMethod?: AuthMethod | undefined;
     }
 
     export interface AuthedRequest {
@@ -80,6 +82,19 @@ export async function authMiddleware(
     return;
   }
 
-  req.user = refreshed.user;
+  req.user = { ...refreshed.user, username: refreshed.user.username ?? null };
+  req.authMethod = refreshed.provider ?? 'replit';
+  next();
+}
+
+export function requireAuth(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+) {
+  if (!req.isAuthenticated()) {
+    res.status(401).json({ error: 'Connectez-vous pour accéder à ce projet.' });
+    return;
+  }
   next();
 }

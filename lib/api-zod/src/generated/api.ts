@@ -52,6 +52,92 @@ export const GenerateApplicationResponse = zod.object({
 
 
 /**
+ * @summary Get the current signed-in account
+ */
+export const GetCurrentAuthUserResponse = zod.object({
+  "user": zod.union([zod.object({
+  "id": zod.string(),
+  "username": zod.string().nullable(),
+  "email": zod.string().nullable(),
+  "firstName": zod.string().nullable(),
+  "lastName": zod.string().nullable(),
+  "profileImageUrl": zod.string().nullable()
+}),zod.null()]),
+  "authMethod": zod.union([zod.enum(['password', 'replit']),zod.null()])
+})
+
+
+/**
+ * @summary Register a Code Me account with username and password
+ */
+export const registerAccountBodyUsernameMin = 3;
+export const registerAccountBodyUsernameMax = 32;
+
+
+export const registerAccountBodyUsernameRegExp = new RegExp('^[A-Za-z0-9][A-Za-z0-9._-]*$');
+export const registerAccountBodyPasswordMin = 8;
+export const registerAccountBodyPasswordMax = 128;
+
+
+
+export const RegisterAccountBody = zod.object({
+  "username": zod.string().min(registerAccountBodyUsernameMin).max(registerAccountBodyUsernameMax).regex(registerAccountBodyUsernameRegExp),
+  "password": zod.string().min(registerAccountBodyPasswordMin).max(registerAccountBodyPasswordMax)
+})
+
+export const RegisterAccountResponse = zod.object({
+  "user": zod.union([zod.object({
+  "id": zod.string(),
+  "username": zod.string().nullable(),
+  "email": zod.string().nullable(),
+  "firstName": zod.string().nullable(),
+  "lastName": zod.string().nullable(),
+  "profileImageUrl": zod.string().nullable()
+}),zod.null()]),
+  "authMethod": zod.union([zod.enum(['password', 'replit']),zod.null()])
+})
+
+
+/**
+ * @summary Sign in with a Code Me username and password
+ */
+export const loginWithPasswordBodyUsernameMin = 3;
+export const loginWithPasswordBodyUsernameMax = 32;
+
+
+export const loginWithPasswordBodyUsernameRegExp = new RegExp('^[A-Za-z0-9][A-Za-z0-9._-]*$');
+export const loginWithPasswordBodyPasswordMin = 8;
+export const loginWithPasswordBodyPasswordMax = 128;
+
+
+
+export const LoginWithPasswordBody = zod.object({
+  "username": zod.string().min(loginWithPasswordBodyUsernameMin).max(loginWithPasswordBodyUsernameMax).regex(loginWithPasswordBodyUsernameRegExp),
+  "password": zod.string().min(loginWithPasswordBodyPasswordMin).max(loginWithPasswordBodyPasswordMax)
+})
+
+export const LoginWithPasswordResponse = zod.object({
+  "user": zod.union([zod.object({
+  "id": zod.string(),
+  "username": zod.string().nullable(),
+  "email": zod.string().nullable(),
+  "firstName": zod.string().nullable(),
+  "lastName": zod.string().nullable(),
+  "profileImageUrl": zod.string().nullable()
+}),zod.null()]),
+  "authMethod": zod.union([zod.enum(['password', 'replit']),zod.null()])
+})
+
+
+/**
+ * @summary Sign out of a Code Me account
+ */
+export const LogoutAccountResponse = zod.object({
+  "success": zod.boolean()
+})
+
+
+/**
  * @summary List saved projects for a workspace
  */
 export const listProjectsQueryWorkspaceIdMin = 8;

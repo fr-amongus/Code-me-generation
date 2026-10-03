@@ -8,6 +8,11 @@
 
 export * from './apiError';
 export * from './attachmentInput';
+export * from './authCredentials';
+export * from './authLogout';
+export * from './authSession';
+export * from './authSessionAuthMethod';
+export * from './authUser';
 export * from './generateApplicationInput';
 export * from './generatedApplication';
 export * from './healthStatus';

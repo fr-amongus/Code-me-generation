@@ -13,8 +13,10 @@ import { GoogleGenAI } from "@google/genai";
 import { hydrateAttachments } from "../lib/attachment-content";
 import { ensureBrowserDependencies } from "../lib/browser-dependencies";
 import { callGroq } from "../lib/groq";
+import { requireAuth } from "../middlewares/authMiddleware";
 
 const router: IRouter = Router();
+router.use("/projects", requireAuth);
 
 const CHAT_SYSTEM_PROMPT = `
 You are Code Me, an expert web application builder working inside an existing project.
@@ -184,11 +186,15 @@ router.get("/projects/:projectId/messages", async (req, res): Promise<void> => {
     res.status(400).json({ error: "Projet invalide." });
     return;
   }
+  if (!req.isAuthenticated()) {
+    res.status(401).json({ error: "Connectez-vous pour accéder à ce projet." });
+    return;
+  }
 
   const [project] = await db
     .select({ id: projectsTable.id })
     .from(projectsTable)
-    .where(eq(projectsTable.id, params.data.projectId));
+    .where(and(eq(projectsTable.id, params.data.projectId), eq(projectsTable.workspaceId, req.user.id)));
   if (!project) {
     res.status(404).json({ error: "Projet introuvable." });
     return;
@@ -210,11 +216,15 @@ router.post("/projects/:projectId/chat", async (req, res): Promise<void> => {
     res.status(400).json({ error: "Écris une amélioration à apporter au projet." });
     return;
   }
+  if (!req.isAuthenticated() || body.data.workspaceId !== req.user.id) {
+    res.status(404).json({ error: "Projet introuvable." });
+    return;
+  }
 
   const [project] = await db
     .select()
     .from(projectsTable)
-    .where(and(eq(projectsTable.id, params.data.projectId), eq(projectsTable.workspaceId, body.data.workspaceId)));
+    .where(and(eq(projectsTable.id, params.data.projectId), eq(projectsTable.workspaceId, req.user.id)));
   if (!project) {
     res.status(404).json({ error: "Projet introuvable." });
     return;
