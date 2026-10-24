@@ -296,7 +296,7 @@ export const ListProjectMemoryFilesResponse = zod.array(ListProjectMemoryFilesRe
 
 
 /**
- * @summary Improve a project through a saved chat message
+ * @summary Create or improve a project through its saved chat
  */
 
 
@@ -333,6 +333,16 @@ export const SendProjectMessageBody = zod.object({
 })).max(sendProjectMessageBodyAttachmentsMax).optional()
 })
 
+export const sendProjectMessageResponseInteractionOneOptionsItemIdMax = 64;
+
+export const sendProjectMessageResponseInteractionOneOptionsItemLabelMax = 200;
+
+export const sendProjectMessageResponseInteractionOneOptionsItemValueMax = 500;
+
+export const sendProjectMessageResponseInteractionOneOptionsMax = 8;
+
+
+
 export const SendProjectMessageResponse = zod.object({
   "project": zod.object({
   "id": zod.number(),
@@ -356,7 +366,319 @@ export const SendProjectMessageResponse = zod.object({
   "role": zod.enum(['user', 'assistant']),
   "content": zod.string(),
   "createdAt": zod.coerce.date()
+}),
+  "interaction": zod.union([zod.object({
+  "id": zod.number(),
+  "projectId": zod.number(),
+  "assistantMessageId": zod.number(),
+  "kind": zod.enum(['question', 'proposal', 'secret']),
+  "answerMode": zod.enum(['single_choice', 'multiple_choice', 'text', 'secret']),
+  "prompt": zod.string(),
+  "options": zod.array(zod.object({
+  "id": zod.string().min(1).max(sendProjectMessageResponseInteractionOneOptionsItemIdMax),
+  "label": zod.string().min(1).max(sendProjectMessageResponseInteractionOneOptionsItemLabelMax),
+  "value": zod.string().min(1).max(sendProjectMessageResponseInteractionOneOptionsItemValueMax)
+})).max(sendProjectMessageResponseInteractionOneOptionsMax),
+  "secretName": zod.string().nullable(),
+  "status": zod.enum(['waiting', 'processing', 'answered', 'cancelled']),
+  "createdAt": zod.coerce.date()
+}),zod.null()])
 })
+
+
+/**
+ * @summary Get the pending question or secret request for a project
+ */
+
+
+
+export const GetPendingProjectInteractionParams = zod.object({
+  "projectId": zod.coerce.number().min(1)
+})
+
+export const getPendingProjectInteractionResponseInteractionOneOptionsItemIdMax = 64;
+
+export const getPendingProjectInteractionResponseInteractionOneOptionsItemLabelMax = 200;
+
+export const getPendingProjectInteractionResponseInteractionOneOptionsItemValueMax = 500;
+
+export const getPendingProjectInteractionResponseInteractionOneOptionsMax = 8;
+
+
+
+export const GetPendingProjectInteractionResponse = zod.object({
+  "interaction": zod.union([zod.object({
+  "id": zod.number(),
+  "projectId": zod.number(),
+  "assistantMessageId": zod.number(),
+  "kind": zod.enum(['question', 'proposal', 'secret']),
+  "answerMode": zod.enum(['single_choice', 'multiple_choice', 'text', 'secret']),
+  "prompt": zod.string(),
+  "options": zod.array(zod.object({
+  "id": zod.string().min(1).max(getPendingProjectInteractionResponseInteractionOneOptionsItemIdMax),
+  "label": zod.string().min(1).max(getPendingProjectInteractionResponseInteractionOneOptionsItemLabelMax),
+  "value": zod.string().min(1).max(getPendingProjectInteractionResponseInteractionOneOptionsItemValueMax)
+})).max(getPendingProjectInteractionResponseInteractionOneOptionsMax),
+  "secretName": zod.string().nullable(),
+  "status": zod.enum(['waiting', 'processing', 'answered', 'cancelled']),
+  "createdAt": zod.coerce.date()
+}),zod.null()])
+})
+
+
+/**
+ * @summary Answer a pending project interaction and resume its chat
+ */
+
+
+
+
+export const RespondToProjectInteractionParams = zod.object({
+  "projectId": zod.coerce.number().min(1),
+  "interactionId": zod.coerce.number().min(1)
+})
+
+export const respondToProjectInteractionBodyChoiceIdsItemMax = 64;
+
+export const respondToProjectInteractionBodyChoiceIdsMax = 8;
+
+export const respondToProjectInteractionBodyTextMax = 4000;
+
+export const respondToProjectInteractionBodySecretValueMax = 10000;
+
+
+
+export const RespondToProjectInteractionBody = zod.object({
+  "choiceIds": zod.array(zod.string().max(respondToProjectInteractionBodyChoiceIdsItemMax)).max(respondToProjectInteractionBodyChoiceIdsMax).optional(),
+  "text": zod.string().max(respondToProjectInteractionBodyTextMax).optional(),
+  "secretValue": zod.string().min(1).max(respondToProjectInteractionBodySecretValueMax).optional(),
+  "confirmOverwrite": zod.boolean().optional()
+})
+
+export const respondToProjectInteractionResponseInteractionOneOptionsItemIdMax = 64;
+
+export const respondToProjectInteractionResponseInteractionOneOptionsItemLabelMax = 200;
+
+export const respondToProjectInteractionResponseInteractionOneOptionsItemValueMax = 500;
+
+export const respondToProjectInteractionResponseInteractionOneOptionsMax = 8;
+
+
+
+export const RespondToProjectInteractionResponse = zod.object({
+  "project": zod.object({
+  "id": zod.number(),
+  "workspaceId": zod.string(),
+  "name": zod.string(),
+  "prompt": zod.string(),
+  "html": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+}),
+  "userMessage": zod.object({
+  "id": zod.number(),
+  "projectId": zod.number(),
+  "role": zod.enum(['user', 'assistant']),
+  "content": zod.string(),
+  "createdAt": zod.coerce.date()
+}),
+  "assistantMessage": zod.object({
+  "id": zod.number(),
+  "projectId": zod.number(),
+  "role": zod.enum(['user', 'assistant']),
+  "content": zod.string(),
+  "createdAt": zod.coerce.date()
+}),
+  "interaction": zod.union([zod.object({
+  "id": zod.number(),
+  "projectId": zod.number(),
+  "assistantMessageId": zod.number(),
+  "kind": zod.enum(['question', 'proposal', 'secret']),
+  "answerMode": zod.enum(['single_choice', 'multiple_choice', 'text', 'secret']),
+  "prompt": zod.string(),
+  "options": zod.array(zod.object({
+  "id": zod.string().min(1).max(respondToProjectInteractionResponseInteractionOneOptionsItemIdMax),
+  "label": zod.string().min(1).max(respondToProjectInteractionResponseInteractionOneOptionsItemLabelMax),
+  "value": zod.string().min(1).max(respondToProjectInteractionResponseInteractionOneOptionsItemValueMax)
+})).max(respondToProjectInteractionResponseInteractionOneOptionsMax),
+  "secretName": zod.string().nullable(),
+  "status": zod.enum(['waiting', 'processing', 'answered', 'cancelled']),
+  "createdAt": zod.coerce.date()
+}),zod.null()])
+})
+
+
+/**
+ * @summary Cancel a pending project interaction without continuing the AI turn
+ */
+
+
+
+
+export const CancelProjectInteractionParams = zod.object({
+  "projectId": zod.coerce.number().min(1),
+  "interactionId": zod.coerce.number().min(1)
+})
+
+export const cancelProjectInteractionBodyReasonMax = 1000;
+
+
+
+export const CancelProjectInteractionBody = zod.object({
+  "reason": zod.string().max(cancelProjectInteractionBodyReasonMax).optional()
+})
+
+export const cancelProjectInteractionResponseInteractionOptionsItemIdMax = 64;
+
+export const cancelProjectInteractionResponseInteractionOptionsItemLabelMax = 200;
+
+export const cancelProjectInteractionResponseInteractionOptionsItemValueMax = 500;
+
+export const cancelProjectInteractionResponseInteractionOptionsMax = 8;
+
+
+
+export const CancelProjectInteractionResponse = zod.object({
+  "interaction": zod.object({
+  "id": zod.number(),
+  "projectId": zod.number(),
+  "assistantMessageId": zod.number(),
+  "kind": zod.enum(['question', 'proposal', 'secret']),
+  "answerMode": zod.enum(['single_choice', 'multiple_choice', 'text', 'secret']),
+  "prompt": zod.string(),
+  "options": zod.array(zod.object({
+  "id": zod.string().min(1).max(cancelProjectInteractionResponseInteractionOptionsItemIdMax),
+  "label": zod.string().min(1).max(cancelProjectInteractionResponseInteractionOptionsItemLabelMax),
+  "value": zod.string().min(1).max(cancelProjectInteractionResponseInteractionOptionsItemValueMax)
+})).max(cancelProjectInteractionResponseInteractionOptionsMax),
+  "secretName": zod.string().nullable(),
+  "status": zod.enum(['waiting', 'processing', 'answered', 'cancelled']),
+  "createdAt": zod.coerce.date()
+}),
+  "userMessage": zod.object({
+  "id": zod.number(),
+  "projectId": zod.number(),
+  "role": zod.enum(['user', 'assistant']),
+  "content": zod.string(),
+  "createdAt": zod.coerce.date()
+})
+})
+
+
+/**
+ * @summary List masked secret metadata for a project
+ */
+
+
+
+export const ListProjectSecretsParams = zod.object({
+  "projectId": zod.coerce.number().min(1)
+})
+
+export const ListProjectSecretsResponseItem = zod.object({
+  "id": zod.number(),
+  "projectId": zod.number(),
+  "name": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+export const ListProjectSecretsResponse = zod.array(ListProjectSecretsResponseItem)
+
+
+/**
+ * @summary Create a project secret
+ */
+
+
+
+export const CreateProjectSecretParams = zod.object({
+  "projectId": zod.coerce.number().min(1)
+})
+
+export const createProjectSecretBodyNameMax = 80;
+
+export const createProjectSecretBodyValueMax = 10000;
+
+
+
+export const CreateProjectSecretBody = zod.object({
+  "name": zod.string().min(1).max(createProjectSecretBodyNameMax),
+  "value": zod.string().min(1).max(createProjectSecretBodyValueMax)
+})
+
+export const CreateProjectSecretResponse = zod.object({
+  "id": zod.number(),
+  "projectId": zod.number(),
+  "name": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Rename or replace a project secret
+ */
+
+
+
+
+export const UpdateProjectSecretParams = zod.object({
+  "projectId": zod.coerce.number().min(1),
+  "secretId": zod.coerce.number().min(1)
+})
+
+export const updateProjectSecretBodyNameMax = 80;
+
+export const updateProjectSecretBodyValueMax = 10000;
+
+
+
+export const UpdateProjectSecretBody = zod.object({
+  "name": zod.string().min(1).max(updateProjectSecretBodyNameMax).optional(),
+  "value": zod.string().min(1).max(updateProjectSecretBodyValueMax).optional()
+})
+
+export const UpdateProjectSecretResponse = zod.object({
+  "id": zod.number(),
+  "projectId": zod.number(),
+  "name": zod.string(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date()
+})
+
+
+/**
+ * @summary Delete a project secret
+ */
+
+
+
+
+export const DeleteProjectSecretParams = zod.object({
+  "projectId": zod.coerce.number().min(1),
+  "secretId": zod.coerce.number().min(1)
+})
+
+export const DeleteProjectSecretResponse = zod.object({
+  "success": zod.boolean()
+})
+
+
+/**
+ * @summary Reveal a project secret after an explicit user action
+ */
+
+
+
+
+export const RevealProjectSecretParams = zod.object({
+  "projectId": zod.coerce.number().min(1),
+  "secretId": zod.coerce.number().min(1)
+})
+
+export const RevealProjectSecretResponse = zod.object({
+  "name": zod.string(),
+  "value": zod.string()
 })
 
 

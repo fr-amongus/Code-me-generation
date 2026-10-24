@@ -9,6 +9,7 @@ import projectVersionsRouter from "./project-versions";
 import projectAttachmentsRouter from "./project-attachments";
 import projectToolsRouter from "./project-tools";
 import projectMemoryRouter from "./project-memory";
+import projectSecretsRouter from "./project-secrets";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use(projectVersionsRouter);
 router.use(projectAttachmentsRouter);
 router.use(projectToolsRouter);
 router.use(projectMemoryRouter);
+router.use(projectSecretsRouter);
 
 export default router;

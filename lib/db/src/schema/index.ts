@@ -23,3 +23,5 @@ export * from "./auth";
 export * from "./project-versions";
 export * from "./project-attachments";
 export * from "./project-memory-files";
+export * from "./project-interactions";
+export * from "./project-secrets";

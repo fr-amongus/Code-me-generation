@@ -349,7 +349,7 @@ paths:
     post:
       operationId: sendProjectMessage
       tags: [chat]
-      summary: Improve a project through a saved chat message
+      summary: Create or improve a project through its saved chat
       parameters:
         - name: projectId
           in: path
@@ -365,7 +365,7 @@ paths:
               $ref: "#/components/schemas/ProjectChatInput"
       responses:
         "200":
-          description: Updated project and saved conversation messages
+          description: Saved chat turn, updated project, and optional pending interaction
           content:
             application/json:
               schema:
@@ -390,6 +390,290 @@ paths:
                 $ref: "#/components/schemas/ApiError"
         "500":
           description: Chat generation service error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /projects/{projectId}/interaction:
+    get:
+      operationId: getPendingProjectInteraction
+      tags: [chat]
+      summary: Get the pending question or secret request for a project
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: number
+            minimum: 1
+      responses:
+        "200":
+          description: Pending interaction, or null when there is none
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PendingProjectInteractionResult"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /projects/{projectId}/interactions/{interactionId}/respond:
+    post:
+      operationId: respondToProjectInteraction
+      tags: [chat]
+      summary: Answer a pending project interaction and resume its chat
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: number
+            minimum: 1
+        - name: interactionId
+          in: path
+          required: true
+          schema:
+            type: number
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectInteractionResponseInput"
+      responses:
+        "200":
+          description: Resumed chat turn, updated project, and optional next interaction
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectChatResult"
+        "400":
+          description: Invalid or incomplete answer
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: Project or pending interaction not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: The interaction is already being handled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /projects/{projectId}/interactions/{interactionId}/cancel:
+    post:
+      operationId: cancelProjectInteraction
+      tags: [chat]
+      summary: Cancel a pending project interaction without continuing the AI turn
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: number
+            minimum: 1
+        - name: interactionId
+          in: path
+          required: true
+          schema:
+            type: number
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectInteractionCancelInput"
+      responses:
+        "200":
+          description: Cancelled interaction and conversation message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CancelProjectInteractionResult"
+        "404":
+          description: Project or pending interaction not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /projects/{projectId}/secrets:
+    get:
+      operationId: listProjectSecrets
+      tags: [secrets]
+      summary: List masked secret metadata for a project
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: number
+            minimum: 1
+      responses:
+        "200":
+          description: Secret metadata without secret values
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ProjectSecret"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    post:
+      operationId: createProjectSecret
+      tags: [secrets]
+      summary: Create a project secret
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: number
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectSecretInput"
+      responses:
+        "201":
+          description: Created secret metadata without the secret value
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectSecret"
+        "400":
+          description: Invalid secret name or value
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: A secret with this name already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: Project not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /projects/{projectId}/secrets/{secretId}:
+    patch:
+      operationId: updateProjectSecret
+      tags: [secrets]
+      summary: Rename or replace a project secret
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: number
+            minimum: 1
+        - name: secretId
+          in: path
+          required: true
+          schema:
+            type: number
+            minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProjectSecretUpdate"
+      responses:
+        "200":
+          description: Updated secret metadata without the secret value
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectSecret"
+        "400":
+          description: Invalid secret update
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: Project or secret not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    delete:
+      operationId: deleteProjectSecret
+      tags: [secrets]
+      summary: Delete a project secret
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: number
+            minimum: 1
+        - name: secretId
+          in: path
+          required: true
+          schema:
+            type: number
+            minimum: 1
+      responses:
+        "200":
+          description: Secret deletion result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectSecretDeleteResult"
+        "404":
+          description: Project or secret not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /projects/{projectId}/secrets/{secretId}/reveal:
+    post:
+      operationId: revealProjectSecret
+      tags: [secrets]
+      summary: Reveal a project secret after an explicit user action
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: number
+            minimum: 1
+        - name: secretId
+          in: path
+          required: true
+          schema:
+            type: number
+            minimum: 1
+      responses:
+        "200":
+          description: Explicitly revealed secret value
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectSecretRevealResult"
+        "404":
+          description: Project or secret not found
           content:
             application/json:
               schema:
@@ -715,10 +999,165 @@ components:
           $ref: "#/components/schemas/ProjectMessage"
         assistantMessage:
           $ref: "#/components/schemas/ProjectMessage"
+        interaction:
+          anyOf:
+            - $ref: "#/components/schemas/ProjectInteraction"
+            - type: "null"
       required:
         - project
         - userMessage
         - assistantMessage
+        - interaction
+    ProjectInteractionOption:
+      type: object
+      properties:
+        id:
+          type: string
+          minLength: 1
+          maxLength: 64
+        label:
+          type: string
+          minLength: 1
+          maxLength: 200
+        value:
+          type: string
+          minLength: 1
+          maxLength: 500
+      required: [id, label, value]
+    ProjectInteraction:
+      type: object
+      properties:
+        id:
+          type: number
+        projectId:
+          type: number
+        assistantMessageId:
+          type: number
+        kind:
+          type: string
+          enum: [question, proposal, secret]
+        answerMode:
+          type: string
+          enum: [single_choice, multiple_choice, text, secret]
+        prompt:
+          type: string
+        options:
+          type: array
+          maxItems: 8
+          items:
+            $ref: "#/components/schemas/ProjectInteractionOption"
+        secretName:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [waiting, processing, answered, cancelled]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - projectId
+        - assistantMessageId
+        - kind
+        - answerMode
+        - prompt
+        - options
+        - secretName
+        - status
+        - createdAt
+    PendingProjectInteractionResult:
+      type: object
+      properties:
+        interaction:
+          anyOf:
+            - $ref: "#/components/schemas/ProjectInteraction"
+            - type: "null"
+      required: [interaction]
+    ProjectInteractionResponseInput:
+      type: object
+      properties:
+        choiceIds:
+          type: array
+          maxItems: 8
+          items:
+            type: string
+            maxLength: 64
+        text:
+          type: string
+          maxLength: 4000
+        secretValue:
+          type: string
+          minLength: 1
+          maxLength: 10000
+        confirmOverwrite:
+          type: boolean
+    ProjectInteractionCancelInput:
+      type: object
+      properties:
+        reason:
+          type: string
+          maxLength: 1000
+    CancelProjectInteractionResult:
+      type: object
+      properties:
+        interaction:
+          $ref: "#/components/schemas/ProjectInteraction"
+        userMessage:
+          $ref: "#/components/schemas/ProjectMessage"
+      required: [interaction, userMessage]
+    ProjectSecret:
+      type: object
+      properties:
+        id:
+          type: number
+        projectId:
+          type: number
+        name:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required: [id, projectId, name, createdAt, updatedAt]
+    ProjectSecretInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        value:
+          type: string
+          minLength: 1
+          maxLength: 10000
+      required: [name, value]
+    ProjectSecretUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 80
+        value:
+          type: string
+          minLength: 1
+          maxLength: 10000
+    ProjectSecretRevealResult:
+      type: object
+      properties:
+        name:
+          type: string
+        value:
+          type: string
+      required: [name, value]
+    ProjectSecretDeleteResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+      required: [success]
     SecurityFinding:
       type: object
       properties:

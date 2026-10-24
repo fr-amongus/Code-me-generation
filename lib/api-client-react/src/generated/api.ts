@@ -24,16 +24,25 @@ import type {
   AuthCredentials,
   AuthLogout,
   AuthSession,
+  CancelProjectInteractionResult,
   GenerateApplicationInput,
   GeneratedApplication,
   HealthStatus,
   ListProjectsParams,
+  PendingProjectInteractionResult,
   Project,
   ProjectChatInput,
   ProjectChatResult,
   ProjectInput,
+  ProjectInteractionCancelInput,
+  ProjectInteractionResponseInput,
   ProjectMemoryFile,
   ProjectMessage,
+  ProjectSecret,
+  ProjectSecretDeleteResult,
+  ProjectSecretInput,
+  ProjectSecretRevealResult,
+  ProjectSecretUpdate,
   ProjectUpdate,
   ProjectWorkspaceInput,
   SecurityScanResult,
@@ -1027,7 +1036,7 @@ export const getSendProjectMessageUrl = (projectId: number,) => {
 }
 
 /**
- * @summary Improve a project through a saved chat message
+ * @summary Create or improve a project through its saved chat
  */
 export const sendProjectMessage = async (projectId: number,
     projectChatInput: ProjectChatInput, options?: Parameters<typeof customFetch>[1]): Promise<ProjectChatResult> => {
@@ -1086,7 +1095,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type SendProjectMessageMutationVariables = {projectId: number;data: BodyType<ProjectChatInput>}
 
     /**
- * @summary Improve a project through a saved chat message
+ * @summary Create or improve a project through its saved chat
  */
 export const useSendProjectMessage = <TError = ErrorType<ApiError>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendProjectMessage>>, TError,SendProjectMessageMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
@@ -1097,6 +1106,642 @@ export const useSendProjectMessage = <TError = ErrorType<ApiError>,
         TContext
       > => {
       return useMutation(getSendProjectMessageMutationOptions(options));
+    }
+
+export const getGetPendingProjectInteractionUrl = (projectId: number,) => {
+
+
+
+
+  return `/api/projects/${projectId}/interaction`
+}
+
+/**
+ * @summary Get the pending question or secret request for a project
+ */
+export const getPendingProjectInteraction = async (projectId: number, options?: Parameters<typeof customFetch>[1]): Promise<PendingProjectInteractionResult> => {
+
+  return customFetch<PendingProjectInteractionResult>(getGetPendingProjectInteractionUrl(projectId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPendingProjectInteractionQueryKey = (projectId: number,) => {
+    return [
+    `/api/projects/${projectId}/interaction`
+    ] as const;
+    }
+
+
+export const getGetPendingProjectInteractionQueryOptions = <TData = Awaited<ReturnType<typeof getPendingProjectInteraction>>, TError = ErrorType<ApiError>>(projectId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPendingProjectInteraction>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPendingProjectInteractionQueryKey(projectId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPendingProjectInteraction>>> = ({ signal }) => getPendingProjectInteraction(projectId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: projectId !== null && projectId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPendingProjectInteraction>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPendingProjectInteractionQueryResult = NonNullable<Awaited<ReturnType<typeof getPendingProjectInteraction>>>
+export type GetPendingProjectInteractionQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary Get the pending question or secret request for a project
+ */
+
+export function useGetPendingProjectInteraction<TData = Awaited<ReturnType<typeof getPendingProjectInteraction>>, TError = ErrorType<ApiError>>(
+ projectId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPendingProjectInteraction>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPendingProjectInteractionQueryOptions(projectId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRespondToProjectInteractionUrl = (projectId: number,
+    interactionId: number,) => {
+
+
+
+
+  return `/api/projects/${projectId}/interactions/${interactionId}/respond`
+}
+
+/**
+ * @summary Answer a pending project interaction and resume its chat
+ */
+export const respondToProjectInteraction = async (projectId: number,
+    interactionId: number,
+    projectInteractionResponseInput: ProjectInteractionResponseInput, options?: Parameters<typeof customFetch>[1]): Promise<ProjectChatResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<ProjectChatResult>(getRespondToProjectInteractionUrl(projectId,interactionId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(projectInteractionResponseInput)
+  }
+);}
+
+
+
+
+
+export const getRespondToProjectInteractionMutationKey = () => ['respondToProjectInteraction'] as const;
+
+export const getRespondToProjectInteractionMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof respondToProjectInteraction>>, TError,RespondToProjectInteractionMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof respondToProjectInteraction>>, TError,RespondToProjectInteractionMutationVariables, TContext> => {
+
+const mutationKey = getRespondToProjectInteractionMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof respondToProjectInteraction>>, RespondToProjectInteractionMutationVariables> = (props) => {
+          const {projectId,interactionId,data} = props ?? {};
+
+          return  respondToProjectInteraction(projectId,interactionId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RespondToProjectInteractionMutationResult = NonNullable<Awaited<ReturnType<typeof respondToProjectInteraction>>>
+    export type RespondToProjectInteractionMutationBody = BodyType<ProjectInteractionResponseInput>
+    export type RespondToProjectInteractionMutationError = ErrorType<ApiError>
+    export type RespondToProjectInteractionMutationVariables = {projectId: number;interactionId: number;data: BodyType<ProjectInteractionResponseInput>}
+
+    /**
+ * @summary Answer a pending project interaction and resume its chat
+ */
+export const useRespondToProjectInteraction = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof respondToProjectInteraction>>, TError,RespondToProjectInteractionMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof respondToProjectInteraction>>,
+        TError,
+        RespondToProjectInteractionMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRespondToProjectInteractionMutationOptions(options));
+    }
+
+export const getCancelProjectInteractionUrl = (projectId: number,
+    interactionId: number,) => {
+
+
+
+
+  return `/api/projects/${projectId}/interactions/${interactionId}/cancel`
+}
+
+/**
+ * @summary Cancel a pending project interaction without continuing the AI turn
+ */
+export const cancelProjectInteraction = async (projectId: number,
+    interactionId: number,
+    projectInteractionCancelInput: ProjectInteractionCancelInput, options?: Parameters<typeof customFetch>[1]): Promise<CancelProjectInteractionResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<CancelProjectInteractionResult>(getCancelProjectInteractionUrl(projectId,interactionId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(projectInteractionCancelInput)
+  }
+);}
+
+
+
+
+
+export const getCancelProjectInteractionMutationKey = () => ['cancelProjectInteraction'] as const;
+
+export const getCancelProjectInteractionMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelProjectInteraction>>, TError,CancelProjectInteractionMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof cancelProjectInteraction>>, TError,CancelProjectInteractionMutationVariables, TContext> => {
+
+const mutationKey = getCancelProjectInteractionMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof cancelProjectInteraction>>, CancelProjectInteractionMutationVariables> = (props) => {
+          const {projectId,interactionId,data} = props ?? {};
+
+          return  cancelProjectInteraction(projectId,interactionId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CancelProjectInteractionMutationResult = NonNullable<Awaited<ReturnType<typeof cancelProjectInteraction>>>
+    export type CancelProjectInteractionMutationBody = BodyType<ProjectInteractionCancelInput>
+    export type CancelProjectInteractionMutationError = ErrorType<ApiError>
+    export type CancelProjectInteractionMutationVariables = {projectId: number;interactionId: number;data: BodyType<ProjectInteractionCancelInput>}
+
+    /**
+ * @summary Cancel a pending project interaction without continuing the AI turn
+ */
+export const useCancelProjectInteraction = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof cancelProjectInteraction>>, TError,CancelProjectInteractionMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof cancelProjectInteraction>>,
+        TError,
+        CancelProjectInteractionMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCancelProjectInteractionMutationOptions(options));
+    }
+
+export const getListProjectSecretsUrl = (projectId: number,) => {
+
+
+
+
+  return `/api/projects/${projectId}/secrets`
+}
+
+/**
+ * @summary List masked secret metadata for a project
+ */
+export const listProjectSecrets = async (projectId: number, options?: Parameters<typeof customFetch>[1]): Promise<ProjectSecret[]> => {
+
+  return customFetch<ProjectSecret[]>(getListProjectSecretsUrl(projectId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListProjectSecretsQueryKey = (projectId: number,) => {
+    return [
+    `/api/projects/${projectId}/secrets`
+    ] as const;
+    }
+
+
+export const getListProjectSecretsQueryOptions = <TData = Awaited<ReturnType<typeof listProjectSecrets>>, TError = ErrorType<ApiError>>(projectId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listProjectSecrets>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListProjectSecretsQueryKey(projectId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listProjectSecrets>>> = ({ signal }) => listProjectSecrets(projectId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: projectId !== null && projectId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listProjectSecrets>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListProjectSecretsQueryResult = NonNullable<Awaited<ReturnType<typeof listProjectSecrets>>>
+export type ListProjectSecretsQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary List masked secret metadata for a project
+ */
+
+export function useListProjectSecrets<TData = Awaited<ReturnType<typeof listProjectSecrets>>, TError = ErrorType<ApiError>>(
+ projectId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listProjectSecrets>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListProjectSecretsQueryOptions(projectId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateProjectSecretUrl = (projectId: number,) => {
+
+
+
+
+  return `/api/projects/${projectId}/secrets`
+}
+
+/**
+ * @summary Create a project secret
+ */
+export const createProjectSecret = async (projectId: number,
+    projectSecretInput: ProjectSecretInput, options?: Parameters<typeof customFetch>[1]): Promise<ProjectSecret> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<ProjectSecret>(getCreateProjectSecretUrl(projectId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(projectSecretInput)
+  }
+);}
+
+
+
+
+
+export const getCreateProjectSecretMutationKey = () => ['createProjectSecret'] as const;
+
+export const getCreateProjectSecretMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createProjectSecret>>, TError,CreateProjectSecretMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createProjectSecret>>, TError,CreateProjectSecretMutationVariables, TContext> => {
+
+const mutationKey = getCreateProjectSecretMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createProjectSecret>>, CreateProjectSecretMutationVariables> = (props) => {
+          const {projectId,data} = props ?? {};
+
+          return  createProjectSecret(projectId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateProjectSecretMutationResult = NonNullable<Awaited<ReturnType<typeof createProjectSecret>>>
+    export type CreateProjectSecretMutationBody = BodyType<ProjectSecretInput>
+    export type CreateProjectSecretMutationError = ErrorType<ApiError>
+    export type CreateProjectSecretMutationVariables = {projectId: number;data: BodyType<ProjectSecretInput>}
+
+    /**
+ * @summary Create a project secret
+ */
+export const useCreateProjectSecret = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createProjectSecret>>, TError,CreateProjectSecretMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createProjectSecret>>,
+        TError,
+        CreateProjectSecretMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateProjectSecretMutationOptions(options));
+    }
+
+export const getUpdateProjectSecretUrl = (projectId: number,
+    secretId: number,) => {
+
+
+
+
+  return `/api/projects/${projectId}/secrets/${secretId}`
+}
+
+/**
+ * @summary Rename or replace a project secret
+ */
+export const updateProjectSecret = async (projectId: number,
+    secretId: number,
+    projectSecretUpdate: ProjectSecretUpdate, options?: Parameters<typeof customFetch>[1]): Promise<ProjectSecret> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<ProjectSecret>(getUpdateProjectSecretUrl(projectId,secretId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(projectSecretUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdateProjectSecretMutationKey = () => ['updateProjectSecret'] as const;
+
+export const getUpdateProjectSecretMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateProjectSecret>>, TError,UpdateProjectSecretMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateProjectSecret>>, TError,UpdateProjectSecretMutationVariables, TContext> => {
+
+const mutationKey = getUpdateProjectSecretMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateProjectSecret>>, UpdateProjectSecretMutationVariables> = (props) => {
+          const {projectId,secretId,data} = props ?? {};
+
+          return  updateProjectSecret(projectId,secretId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateProjectSecretMutationResult = NonNullable<Awaited<ReturnType<typeof updateProjectSecret>>>
+    export type UpdateProjectSecretMutationBody = BodyType<ProjectSecretUpdate>
+    export type UpdateProjectSecretMutationError = ErrorType<ApiError>
+    export type UpdateProjectSecretMutationVariables = {projectId: number;secretId: number;data: BodyType<ProjectSecretUpdate>}
+
+    /**
+ * @summary Rename or replace a project secret
+ */
+export const useUpdateProjectSecret = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateProjectSecret>>, TError,UpdateProjectSecretMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateProjectSecret>>,
+        TError,
+        UpdateProjectSecretMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUpdateProjectSecretMutationOptions(options));
+    }
+
+export const getDeleteProjectSecretUrl = (projectId: number,
+    secretId: number,) => {
+
+
+
+
+  return `/api/projects/${projectId}/secrets/${secretId}`
+}
+
+/**
+ * @summary Delete a project secret
+ */
+export const deleteProjectSecret = async (projectId: number,
+    secretId: number, options?: Parameters<typeof customFetch>[1]): Promise<ProjectSecretDeleteResult> => {
+
+  return customFetch<ProjectSecretDeleteResult>(getDeleteProjectSecretUrl(projectId,secretId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteProjectSecretMutationKey = () => ['deleteProjectSecret'] as const;
+
+export const getDeleteProjectSecretMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteProjectSecret>>, TError,DeleteProjectSecretMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteProjectSecret>>, TError,DeleteProjectSecretMutationVariables, TContext> => {
+
+const mutationKey = getDeleteProjectSecretMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteProjectSecret>>, DeleteProjectSecretMutationVariables> = (props) => {
+          const {projectId,secretId} = props ?? {};
+
+          return  deleteProjectSecret(projectId,secretId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteProjectSecretMutationResult = NonNullable<Awaited<ReturnType<typeof deleteProjectSecret>>>
+
+    export type DeleteProjectSecretMutationError = ErrorType<ApiError>
+    export type DeleteProjectSecretMutationVariables = {projectId: number;secretId: number}
+
+    /**
+ * @summary Delete a project secret
+ */
+export const useDeleteProjectSecret = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteProjectSecret>>, TError,DeleteProjectSecretMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteProjectSecret>>,
+        TError,
+        DeleteProjectSecretMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteProjectSecretMutationOptions(options));
+    }
+
+export const getRevealProjectSecretUrl = (projectId: number,
+    secretId: number,) => {
+
+
+
+
+  return `/api/projects/${projectId}/secrets/${secretId}/reveal`
+}
+
+/**
+ * @summary Reveal a project secret after an explicit user action
+ */
+export const revealProjectSecret = async (projectId: number,
+    secretId: number, options?: Parameters<typeof customFetch>[1]): Promise<ProjectSecretRevealResult> => {
+
+  return customFetch<ProjectSecretRevealResult>(getRevealProjectSecretUrl(projectId,secretId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRevealProjectSecretMutationKey = () => ['revealProjectSecret'] as const;
+
+export const getRevealProjectSecretMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revealProjectSecret>>, TError,RevealProjectSecretMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof revealProjectSecret>>, TError,RevealProjectSecretMutationVariables, TContext> => {
+
+const mutationKey = getRevealProjectSecretMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof revealProjectSecret>>, RevealProjectSecretMutationVariables> = (props) => {
+          const {projectId,secretId} = props ?? {};
+
+          return  revealProjectSecret(projectId,secretId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RevealProjectSecretMutationResult = NonNullable<Awaited<ReturnType<typeof revealProjectSecret>>>
+
+    export type RevealProjectSecretMutationError = ErrorType<ApiError>
+    export type RevealProjectSecretMutationVariables = {projectId: number;secretId: number}
+
+    /**
+ * @summary Reveal a project secret after an explicit user action
+ */
+export const useRevealProjectSecret = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revealProjectSecret>>, TError,RevealProjectSecretMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof revealProjectSecret>>,
+        TError,
+        RevealProjectSecretMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRevealProjectSecretMutationOptions(options));
     }
 
 export const getScanProjectSecurityUrl = (projectId: number,) => {

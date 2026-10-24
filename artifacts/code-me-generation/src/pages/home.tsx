@@ -14,14 +14,11 @@ import {
   Info,
   Layers3,
   Loader2,
-  MessageCircle,
   Monitor,
   Pencil,
   Paperclip,
-  Play,
   Plus,
   RotateCcw,
-  Send,
   ShieldCheck,
   Smartphone,
   Sparkles,
@@ -38,7 +35,6 @@ import {
   getListProjectsQueryKey,
   useCreateProject,
   useDeleteProject,
-  useGenerateApplication,
   useListProjectMessages,
   useListProjectMemoryFiles,
   useListProjects,
@@ -50,6 +46,8 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@workspace/replit-auth-web';
 import ProjectToolbox, { type ToolboxAiAction } from '@/components/project-toolbox';
+import ProjectConversation from '@/components/project-conversation';
+import ProjectSecretManager from '@/components/project-secret-manager';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/components/ui/hover-card';
 
 type WorkspaceTab = 'preview' | 'code';
@@ -267,7 +265,7 @@ function BrandMark() {
   );
 }
 
-function EmptyPreview({ onTryPrompt }: { onTryPrompt: (prompt: string) => void }) {
+function EmptyPreview() {
   return (
     <div className="flex min-h-[480px] flex-1 flex-col items-center justify-center px-5 py-16 text-center sm:min-h-[560px]">
       <div className="relative mb-7">
@@ -281,18 +279,11 @@ function EmptyPreview({ onTryPrompt }: { onTryPrompt: (prompt: string) => void }
         Votre idée prend forme ici.
       </h2>
       <p className="mt-3 max-w-sm text-[13px] leading-6 text-[hsl(var(--muted-foreground))]">
-        Créez un projet puis décrivez ce que vous voulez construire. Le résultat apparaîtra dans cet espace.
+        Décrivez votre idée dans la conversation du projet. Le premier message créera la structure de base ici.
       </p>
-      <button
-        type="button"
-        onClick={() => onTryPrompt(starterPrompts[0].prompt)}
-        className="mt-7 inline-flex items-center gap-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--secondary)/.65)] px-4 py-2.5 text-[12px] font-medium text-[hsl(var(--foreground))] transition-all hover:-translate-y-0.5 hover:border-[hsl(var(--primary)/.45)] hover:bg-[hsl(var(--secondary))]"
-        data-testid="button-try-starter-prompt"
-      >
-        <Sparkles className="size-3.5 text-[hsl(var(--primary))]" />
-        Essayer un exemple
-        <ArrowUpRight className="size-3.5 text-[hsl(var(--muted-foreground))]" />
-      </button>
+      <p className="mt-6 max-w-sm text-[10px] leading-5 text-[hsl(var(--muted-foreground))]">
+        Exemple : {starterPrompts[0].prompt}
+      </p>
     </div>
   );
 }
@@ -531,8 +522,8 @@ export default function Home() {
   const [authPassword, setAuthPassword] = useState('');
   const [authError, setAuthError] = useState('');
   const [isAuthSubmitting, setIsAuthSubmitting] = useState(false);
-  const [prompt, setPrompt] = useState('');
-  const [chatInput, setChatInput] = useState('');
+  const [conversationBusy, setConversationBusy] = useState(false);
+  const [conversationBlocked, setConversationBlocked] = useState(false);
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('preview');
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const [generatedHtml, setGeneratedHtml] = useState<string | null>(null);
@@ -583,14 +574,13 @@ export default function Home() {
       enabled: Boolean(activeProject),
     },
   });
-  const generateMutation = useGenerateApplication();
   const createMutation = useCreateProject();
   const updateMutation = useUpdateProject();
   const deleteMutation = useDeleteProject();
   const chatMutation = useSendProjectMessage();
-  const error = generateMutation.error ?? createMutation.error ?? updateMutation.error ?? deleteMutation.error ?? chatMutation.error;
-  const isPending = generateMutation.isPending || createMutation.isPending || updateMutation.isPending;
-  const isChatPending = chatMutation.isPending;
+  const error = createMutation.error ?? updateMutation.error ?? deleteMutation.error ?? chatMutation.error;
+  const isPending = createMutation.isPending || updateMutation.isPending;
+  const isChatPending = chatMutation.isPending || conversationBusy;
   const currentHtml = hasUnsavedCode ? editedCode : activeProject?.html ?? generatedHtml;
   const hasResult = Boolean(currentHtml);
   const codeStats = useMemo(() => currentHtml ? { lines: currentHtml.split('\n').length, chars: currentHtml.length } : { lines: 0, chars: 0 }, [currentHtml]);
@@ -603,8 +593,6 @@ export default function Home() {
     if (previousUserId.current !== null && previousUserId.current !== nextUserId) {
       setSelectedProjectId(null);
       setGeneratedHtml(null);
-      setPrompt('');
-      setChatInput('');
       setPromptAttachments([]);
       setEditedCode('');
       setHasUnsavedCode(false);
@@ -682,8 +670,6 @@ export default function Home() {
 
   useEffect(() => {
     setGeneratedHtml(null);
-    setPrompt(activeProject?.prompt ?? '');
-    setChatInput('');
     setActiveTab('preview');
     setPreviewError('');
     setConsoleEntries([]);
@@ -694,19 +680,6 @@ export default function Home() {
     setVersions([]);
     setSelectedVersionId('');
   }, [selectedProjectId]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    try {
-      const pendingPrompt = window.sessionStorage.getItem('code-me-pending-prompt');
-      if (pendingPrompt) {
-        setPrompt(pendingPrompt);
-        window.sessionStorage.removeItem('code-me-pending-prompt');
-      }
-    } catch {
-      // Session storage can be unavailable in privacy-restricted browsers.
-    }
-  }, [isAuthenticated]);
 
   useEffect(() => {
     const handleShortcut = (event: globalThis.KeyboardEvent) => {
@@ -839,15 +812,6 @@ export default function Home() {
       await refreshAuth();
       setAuthPassword('');
       setAuthDialogOpen(false);
-      try {
-        const pendingPrompt = window.sessionStorage.getItem('code-me-pending-prompt');
-        if (pendingPrompt) {
-          setPrompt(pendingPrompt);
-          window.sessionStorage.removeItem('code-me-pending-prompt');
-        }
-      } catch {
-        // Session storage can be unavailable in privacy-restricted browsers.
-      }
     } catch (submitError) {
       setAuthError(submitError instanceof Error ? submitError.message : 'La connexion a échoué.');
     } finally {
@@ -869,36 +833,6 @@ export default function Home() {
     });
   };
 
-  const handleGenerate = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const trimmedPrompt = prompt.trim();
-    if (trimmedPrompt.length < 3 || isPending || aiCooldownActive) return;
-    if (!discardUnsavedCode()) return;
-    if (!isAuthenticated) {
-      try { window.sessionStorage.setItem('code-me-pending-prompt', trimmedPrompt); } catch { /* continue to sign in */ }
-      openAuthDialog();
-      return;
-    }
-    setActiveTab('preview');
-    setCopied(false);
-    generateMutation.mutate({ data: { prompt: trimmedPrompt, attachments: promptAttachments } }, {
-      onSuccess: (result) => {
-        setGeneratedHtml(result.html);
-        if (activeProject) {
-          updateMutation.mutate({ id: activeProject.id, data: { workspaceId, prompt: trimmedPrompt, html: result.html } }, { onSuccess: invalidateProjects });
-        } else {
-          createMutation.mutate({ data: { workspaceId, name: projectNameFromPrompt(trimmedPrompt), prompt: trimmedPrompt, html: result.html } }, {
-            onSuccess: (project) => {
-              setSelectedProjectId(project.id);
-              invalidateProjects();
-            },
-          });
-        }
-      },
-      onError: armAiCooldown,
-    });
-  };
-
   const handleNewProject = () => {
     if (!isAuthenticated) {
       openAuthDialog();
@@ -908,11 +842,39 @@ export default function Home() {
     createMutation.mutate({ data: { workspaceId, name: 'Nouveau projet', prompt: '', html: null } }, {
       onSuccess: (project) => {
         setSelectedProjectId(project.id);
-        setPrompt('');
         setGeneratedHtml(null);
         invalidateProjects();
       },
     });
+  };
+
+  const createProjectFromConversation = async (message: string) => {
+    const project = await createMutation.mutateAsync({
+      data: { workspaceId, name: projectNameFromPrompt(message), prompt: message, html: null },
+    });
+    setSelectedProjectId(project.id);
+    setGeneratedHtml(null);
+    queryClient.setQueryData<Project[]>(getListProjectsQueryKey({ workspaceId }), (previous) =>
+      previous ? [...previous.filter((item) => item.id !== project.id), project] : previous,
+    );
+    invalidateProjects();
+    return project;
+  };
+
+  const syncConversationProject = (project: Project) => {
+    setSelectedProjectId(project.id);
+    setGeneratedHtml(null);
+    queryClient.setQueryData<Project[]>(getListProjectsQueryKey({ workspaceId }), (previous) =>
+      previous?.map((item) => item.id === project.id ? project : item),
+    );
+    invalidateProjects();
+  };
+
+  const prepareConversationAiAction = () => {
+    if (!discardUnsavedCode()) return false;
+    setActiveTab('preview');
+    setCopied(false);
+    return true;
   };
 
   const handleRenameKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -938,11 +900,10 @@ export default function Home() {
   };
 
   const sendChatMessage = (message: string) => {
-    if (!activeProject || !message.trim() || isChatPending || aiCooldownActive) return false;
+    if (!activeProject || !message.trim() || isChatPending || conversationBlocked || aiCooldownActive) return false;
     if (!discardUnsavedCode()) return false;
     chatMutation.mutate({ projectId: activeProject.id, data: { workspaceId, message: message.trim(), attachments: promptAttachments } }, {
       onSuccess: (result) => {
-        setChatInput('');
         setGeneratedHtml(null);
         queryClient.setQueryData<Project[]>(getListProjectsQueryKey({ workspaceId }), (previous) => previous?.map((project) => project.id === result.project.id ? result.project : project));
         queryClient.setQueryData<ProjectMessage[]>(getListProjectMessagesQueryKey(activeProject.id), (previous) => [...(previous ?? []), result.userMessage, result.assistantMessage]);
@@ -953,18 +914,8 @@ export default function Home() {
     return true;
   };
 
-  const handleSendChat = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const message = chatInput.trim();
-    if (!isAuthenticated) {
-      openAuthDialog();
-      return;
-    }
-    sendChatMessage(message);
-  };
-
   const handleMessageAction = (action: MessageActionId, message: ProjectMessage): MessageActionFeedback | undefined => {
-    if (!activeProject || isChatPending || aiCooldownActive) {
+    if (!activeProject || isChatPending || conversationBlocked || aiCooldownActive) {
       return { message: aiCooldownActive ? aiCooldownLabel : 'Attendez la fin de la demande en cours.', tone: 'warning' };
     }
     if (!isAuthenticated) {
@@ -1042,7 +993,7 @@ export default function Home() {
   };
 
   const handleToolboxAiAction = (action: ToolboxAiAction) => {
-    if (!activeProject || isChatPending || aiCooldownActive) return;
+    if (!activeProject || isChatPending || conversationBlocked || aiCooldownActive) return;
     if (!isAuthenticated) {
       openAuthDialog();
       return;
@@ -1073,7 +1024,7 @@ export default function Home() {
       openAuthDialog();
       return;
     }
-    if (!activeProject || (!previewError && !error) || isChatPending || aiCooldownActive) return;
+    if (!activeProject || (!previewError && !error) || isChatPending || conversationBlocked || aiCooldownActive) return;
     if (!discardUnsavedCode()) return;
     const detectedError = previewError || getErrorMessage(error);
     const message = `Une erreur a été détectée dans le projet : "${detectedError}". Analyse le HTML actuel, corrige la cause sans supprimer les fonctionnalités existantes, puis explique précisément le correctif.`;
@@ -1089,7 +1040,7 @@ export default function Home() {
   };
 
   const handleFixSecurity = () => {
-    if (!securityReport?.findings.length || isFixingSecurity || isChatPending || aiCooldownActive) return;
+    if (!securityReport?.findings.length || isFixingSecurity || isChatPending || conversationBlocked || aiCooldownActive) return;
     if (!isAuthenticated) {
       openAuthDialog();
       return;
@@ -1162,11 +1113,11 @@ export default function Home() {
     }
   };
 
-  const statusLabel = isPending ? 'Génération en cours' : isChatPending ? 'Amélioration en cours' : hasResult ? 'Application prête' : activeProject ? 'Projet vide' : 'Créez votre premier projet';
+  const statusLabel = isPending ? 'Projet en cours' : isChatPending ? 'IA en cours' : conversationBlocked ? 'Réponse attendue' : hasResult ? 'Application prête' : activeProject ? 'Projet vide' : 'Créez votre premier projet';
   const aiCooldownLabel = `IA temporairement limitée · ${aiCooldownRemaining}s`;
   const commandItems: Array<{ id: string; label: string; detail: string; action: () => void; disabled?: boolean }> = [
     { id: 'toolbox', label: 'Ouvrir la boîte à outils', detail: 'Fichiers, versions, qualité, ressources et actions IA', action: () => { setToolPanel('toolbox'); setCommandPaletteOpen(false); }, disabled: !activeProject },
-    { id: 'explain', label: 'Expliquer le code', detail: 'Demander une lecture pédagogique à l’assistant', action: () => { setToolPanel('toolbox'); handleToolboxAiAction('explain'); setCommandPaletteOpen(false); }, disabled: !activeProject || isChatPending || aiCooldownActive },
+    { id: 'explain', label: 'Expliquer le code', detail: 'Demander une lecture pédagogique à l’assistant', action: () => { setToolPanel('toolbox'); handleToolboxAiAction('explain'); setCommandPaletteOpen(false); }, disabled: !activeProject || isChatPending || conversationBlocked || aiCooldownActive },
     { id: 'quality', label: 'Analyser la qualité', detail: 'Ouvrir les contrôles locaux accessibilité et performance', action: () => { setToolPanel('toolbox'); setCommandPaletteOpen(false); }, disabled: !activeProject },
     { id: 'security', label: 'Lancer le scan sécurité', detail: 'Analyser le projet avec les règles locales et plusieurs fournisseurs IA', action: () => { handleSecurityScan(); setCommandPaletteOpen(false); }, disabled: !activeProject || isScanning },
     { id: 'shell', label: 'Ouvrir le terminal sécurisé', detail: 'Consulter les fichiers et les versions du projet', action: () => { setToolPanel('shell'); setCommandPaletteOpen(false); }, disabled: !activeProject },
@@ -1186,7 +1137,7 @@ export default function Home() {
           <input id="context-attachments" type="file" multiple accept="image/*,.pdf,.txt,.md,.json,.csv,.html,.css,.js" className="sr-only" onChange={handleAttachmentSelection} />
         </label>
         <AttachmentList attachments={promptAttachments} onRemove={(index) => setPromptAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index))} />
-        <span className="text-[10px] text-[hsl(var(--muted-foreground))]">Le contexte sera transmis au générateur et à l’assistant.</span>
+         <span className="text-[10px] text-[hsl(var(--muted-foreground))]">Le contexte sera joint aux prochains messages de cette conversation.</span>
         {attachmentError && <span className="text-[10px] text-[hsl(var(--destructive))]">{attachmentError}</span>}
         <label className="ml-auto inline-flex items-center gap-1.5 text-[10px] text-[hsl(var(--muted-foreground))]">
           <span>Export</span>

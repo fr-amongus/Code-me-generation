@@ -185,10 +185,146 @@ export interface ProjectChatInput {
   attachments?: AttachmentInput[];
 }
 
+export type ProjectInteractionKind = typeof ProjectInteractionKind[keyof typeof ProjectInteractionKind];
+
+
+export const ProjectInteractionKind = {
+  question: 'question',
+  proposal: 'proposal',
+  secret: 'secret',
+} as const;
+
+export type ProjectInteractionAnswerMode = typeof ProjectInteractionAnswerMode[keyof typeof ProjectInteractionAnswerMode];
+
+
+export const ProjectInteractionAnswerMode = {
+  single_choice: 'single_choice',
+  multiple_choice: 'multiple_choice',
+  text: 'text',
+  secret: 'secret',
+} as const;
+
+export interface ProjectInteractionOption {
+  /**
+     * @minLength 1
+     * @maxLength 64
+     */
+  id: string;
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  label: string;
+  /**
+     * @minLength 1
+     * @maxLength 500
+     */
+  value: string;
+}
+
+export type ProjectInteractionStatus = typeof ProjectInteractionStatus[keyof typeof ProjectInteractionStatus];
+
+
+export const ProjectInteractionStatus = {
+  waiting: 'waiting',
+  processing: 'processing',
+  answered: 'answered',
+  cancelled: 'cancelled',
+} as const;
+
+export interface ProjectInteraction {
+  id: number;
+  projectId: number;
+  assistantMessageId: number;
+  kind: ProjectInteractionKind;
+  answerMode: ProjectInteractionAnswerMode;
+  prompt: string;
+  /** @maxItems 8 */
+  options: ProjectInteractionOption[];
+  /** @nullable */
+  secretName: string | null;
+  status: ProjectInteractionStatus;
+  createdAt: string;
+}
+
 export interface ProjectChatResult {
   project: Project;
   userMessage: ProjectMessage;
   assistantMessage: ProjectMessage;
+  interaction: ProjectInteraction | null;
+}
+
+export interface PendingProjectInteractionResult {
+  interaction: ProjectInteraction | null;
+}
+
+export interface ProjectInteractionResponseInput {
+  /**
+     * @maxItems 8
+     * @items.maxLength 64
+     */
+  choiceIds?: string[];
+  /** @maxLength 4000 */
+  text?: string;
+  /**
+     * @minLength 1
+     * @maxLength 10000
+     */
+  secretValue?: string;
+  confirmOverwrite?: boolean;
+}
+
+export interface ProjectInteractionCancelInput {
+  /** @maxLength 1000 */
+  reason?: string;
+}
+
+export interface CancelProjectInteractionResult {
+  interaction: ProjectInteraction;
+  userMessage: ProjectMessage;
+}
+
+export interface ProjectSecret {
+  id: number;
+  projectId: number;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProjectSecretInput {
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  name: string;
+  /**
+     * @minLength 1
+     * @maxLength 10000
+     */
+  value: string;
+}
+
+export interface ProjectSecretUpdate {
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  name?: string;
+  /**
+     * @minLength 1
+     * @maxLength 10000
+     */
+  value?: string;
+}
+
+export interface ProjectSecretRevealResult {
+  name: string;
+  value: string;
+}
+
+export interface ProjectSecretDeleteResult {
+  success: boolean;
 }
 
 export type SecurityFindingSeverity = typeof SecurityFindingSeverity[keyof typeof SecurityFindingSeverity];

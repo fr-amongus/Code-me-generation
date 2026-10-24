@@ -6,10 +6,12 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { Project } from './project';
+import type { ProjectInteraction } from './projectInteraction';
 import type { ProjectMessage } from './projectMessage';
 
 export interface ProjectChatResult {
   project: Project;
   userMessage: ProjectMessage;
   assistantMessage: ProjectMessage;
+  interaction: ProjectInteraction | null;
 }
