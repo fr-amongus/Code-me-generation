@@ -4,3 +4,4 @@
 - [AI rate-limit cooldown](ai-rate-limit-cooldown.md) — surface Retry-After and lock every AI action briefly after provider throttling.
 - [Browser library loading](browser-library-loading.md) — single-file generated apps use ordered CDN scripts for detected browser globals.
 - [Code Me account scope](code-me-account-scope.md) — Code Me registration uses username and password only; recovery is deferred while Replit remains optional.
+- [Code Me update dashboard](code-me-update-dashboard.md) — start Code Me update messages with a task-status table and review affected files before editing.
