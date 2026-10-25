@@ -114,6 +114,83 @@ test("projects are isolated by workspace", async () => {
   assert.equal(forbiddenUpdate.status, 404);
 });
 
+test("project secrets stay hidden until explicitly revealed and support full lifecycle", async () => {
+  const create = await request("/projects", {
+    method: "POST",
+    body: JSON.stringify({ workspaceId: workspaceA, name: "Secret contract", prompt: "", html: null }),
+  });
+  assert.equal(create.status, 201);
+  const project = await create.json();
+  createdIds.push(project.id);
+
+  const secondProjectResponse = await request("/projects", {
+    method: "POST",
+    body: JSON.stringify({ workspaceId: workspaceA, name: "Other secret scope", prompt: "", html: null }),
+  });
+  assert.equal(secondProjectResponse.status, 201);
+  const secondProject = await secondProjectResponse.json();
+  createdIds.push(secondProject.id);
+
+  const plaintext = "contract-secret-value-not-for-default-response";
+  const createdSecretResponse = await request(`/projects/${project.id}/secrets`, {
+    method: "POST",
+    body: JSON.stringify({ name: "API_TOKEN_TEST", value: plaintext }),
+  });
+  assert.equal(createdSecretResponse.status, 201);
+  const createdSecret = await createdSecretResponse.json();
+  assert.equal(createdSecret.name, "API_TOKEN_TEST");
+  assert.equal("value" in createdSecret, false);
+  assert.equal("encryptedValue" in createdSecret, false);
+
+  const duplicate = await request(`/projects/${project.id}/secrets`, {
+    method: "POST",
+    body: JSON.stringify({ name: "api_token_test", value: "another-test-value" }),
+  });
+  assert.equal(duplicate.status, 409);
+
+  const list = await request(`/projects/${project.id}/secrets`);
+  assert.equal(list.status, 200);
+  const secrets = await list.json();
+  assert.equal(secrets.length, 1);
+  assert.equal(secrets[0].name, "API_TOKEN_TEST");
+  assert.equal(JSON.stringify(secrets).includes(plaintext), false);
+  assert.equal("value" in secrets[0], false);
+
+  const emptyOtherProject = await request(`/projects/${secondProject.id}/secrets`);
+  assert.deepEqual(await emptyOtherProject.json(), []);
+
+  const unauthenticated = await request(`/projects/${project.id}/secrets`, {}, false);
+  assert.equal(unauthenticated.status, 401);
+
+  const revealed = await request(`/projects/${project.id}/secrets/${createdSecret.id}/reveal`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+  assert.equal(revealed.status, 200);
+  assert.deepEqual(await revealed.json(), { name: "API_TOKEN_TEST", value: plaintext });
+
+  const replacement = "contract-secret-replacement-value";
+  const updated = await request(`/projects/${project.id}/secrets/${createdSecret.id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ value: replacement }),
+  });
+  assert.equal(updated.status, 200);
+  assert.equal("value" in await updated.json(), false);
+  const revealedReplacement = await request(`/projects/${project.id}/secrets/${createdSecret.id}/reveal`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+  assert.deepEqual(await revealedReplacement.json(), { name: "API_TOKEN_TEST", value: replacement });
+
+  const deleted = await request(`/projects/${project.id}/secrets/${createdSecret.id}`, { method: "DELETE" });
+  assert.deepEqual(await deleted.json(), { success: true });
+  const afterDelete = await request(`/projects/${project.id}/secrets/${createdSecret.id}/reveal`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+  assert.equal(afterDelete.status, 404);
+});
+
 test("a project update creates a restorable version", async () => {
   const create = await request("/projects", {
     method: "POST",

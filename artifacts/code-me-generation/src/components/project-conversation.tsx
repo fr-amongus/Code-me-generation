@@ -215,6 +215,7 @@ export function ProjectConversation({
   const [error, setError] = useState('');
   const [creatingProject, setCreatingProject] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const previousProjectId = useRef(projectId);
   const resolvedId = projectId ?? activeProjectId;
   const messageKey = resolvedId === null ? undefined : getListProjectMessagesQueryKey(resolvedId);
   const pendingKey = resolvedId === null ? undefined : getGetPendingProjectInteractionQueryKey(resolvedId);
@@ -246,14 +247,17 @@ export function ProjectConversation({
 
   useEffect(() => {
     setActiveProjectId(projectId);
-    if (projectId === null) setDraft('');
+    if (projectId === null || (previousProjectId.current !== null && projectId !== previousProjectId.current)) {
+      setDraft('');
+    }
+    previousProjectId.current = projectId;
   }, [projectId]);
   useEffect(() => {
     onBusyChange?.(isBusy);
   }, [isBusy, onBusyChange]);
   useEffect(() => {
-    onPendingInteractionChange?.(blockingInteraction);
-  }, [blockingInteraction, onPendingInteractionChange]);
+    onPendingInteractionChange?.(blockingInteraction || pendingCheckBlocked);
+  }, [blockingInteraction, onPendingInteractionChange, pendingCheckBlocked]);
   useEffect(() => {
     if (!isAuthenticated) return;
     try {
@@ -403,6 +407,7 @@ export function ProjectConversation({
         {pendingCheckBlocked && !pendingQuery.isError && <p role="status" className="flex items-center gap-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card)/.55)] px-3 py-2 text-[10px] text-[hsl(var(--muted-foreground))]"><Loader2 className="size-3 animate-spin" />Vérification des demandes en attente avant de reprendre…</p>}
         {processingInteraction && <div role="status" className="flex items-center gap-2 rounded-lg border border-[hsl(var(--primary)/.22)] bg-[hsl(var(--primary)/.06)] px-3 py-2.5 text-[10px] text-[hsl(var(--primary))]"><Loader2 className="size-3.5 animate-spin" /><span><strong className="font-medium">Réponse en cours de traitement.</strong> Vous pourrez reprendre la conversation dès qu’elle sera prête.</span></div>}
         {interaction && <InteractionCard
+          key={interaction.id}
           interaction={interaction}
           busy={respondMutation.isPending || cancelMutation.isPending}
           aiDisabled={aiCooldownActive}
