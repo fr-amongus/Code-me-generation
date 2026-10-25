@@ -8,6 +8,8 @@ let workspaceA = `contract-a-${Date.now()}`;
 const workspaceB = `contract-b-${Date.now()}`;
 const createdIds = [];
 let authCookie = "";
+let contractUsername = "";
+const contractPassword = "test-password-123";
 
 async function loadBrowserDependencyHelper() {
   const source = await readFile(new URL("../src/lib/browser-dependencies.ts", import.meta.url), "utf8");
@@ -48,18 +50,28 @@ test("3D browser libraries are injected in dependency order without duplicates",
 });
 
 after(async () => {
-  await Promise.all(createdIds.map((id) => request(`/projects/${id}`, {
+  if (createdIds.length && contractUsername) {
+    const login = await request("/auth/password/login", {
+      method: "POST",
+      body: JSON.stringify({ username: contractUsername, password: contractPassword }),
+    }, false);
+    assert.equal(login.status, 200, "test cleanup must be able to restore its session");
+    authCookie = sessionCookie(login);
+  }
+  const cleanupResponses = await Promise.all(createdIds.map((id) => request(`/projects/${id}`, {
     method: "DELETE",
     body: JSON.stringify({ workspaceId: workspaceA }),
   })));
+  assert.ok(cleanupResponses.every((response) => response.ok), "test projects must be removed");
+  if (authCookie) await request("/auth/logout", { method: "POST" });
 });
 
 test("Code Me accounts register and sign in with only a username and password", async () => {
   const username = `contract-${Date.now()}`;
-  const password = "test-password-123";
+  contractUsername = username;
   const registration = await request("/auth/register", {
     method: "POST",
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ username, password: contractPassword }),
   }, false);
   assert.equal(registration.status, 201);
   const created = await registration.json();
@@ -70,7 +82,7 @@ test("Code Me accounts register and sign in with only a username and password", 
 
   const login = await request("/auth/password/login", {
     method: "POST",
-    body: JSON.stringify({ username: username.toUpperCase(), password }),
+    body: JSON.stringify({ username: username.toUpperCase(), password: contractPassword }),
   }, false);
   assert.equal(login.status, 200);
   authCookie = sessionCookie(login);
@@ -227,34 +239,73 @@ test("storage upload URLs require authentication", async () => {
   assert.equal(response.status, 401);
 });
 
-test("empty project can be generated, improved, and versioned", { timeout: 180_000 }, async () => {
+test("a project can pause for a question, resume, improve, and be versioned", { timeout: 180_000 }, async () => {
   const create = await request("/projects", {
     method: "POST",
-    body: JSON.stringify({ workspaceId: workspaceA, name: "AI contract", prompt: "", html: null }),
+    body: JSON.stringify({ workspaceId: workspaceA, name: "AI chat contract", prompt: "", html: null }),
   });
   const project = await create.json();
   createdIds.push(project.id);
 
-  const generated = await request("/generate", {
+  const firstTurn = await request(`/projects/${project.id}/chat`, {
     method: "POST",
-    body: JSON.stringify({ prompt: "Crée une page HTML très simple avec un titre et un bouton." }),
+    body: JSON.stringify({
+      workspaceId: workspaceA,
+      message: "Je veux une page très simple avec un titre et un bouton. Avant de créer le HTML, demande-moi obligatoirement une seule question à choix unique pour choisir entre une palette sombre et une palette claire. Attends ma réponse avant de coder.",
+    }),
   });
-  assert.equal(generated.status, 200);
-  const generatedPayload = await generated.json();
-  assert.match(generatedPayload.html, /<html/i);
+  assert.equal(firstTurn.status, 200);
+  const firstTurnPayload = await firstTurn.json();
+  assert.ok(firstTurnPayload.interaction, "the assistant should pause for its requested clarification");
+  assert.equal(firstTurnPayload.interaction.kind, "question");
+  assert.equal(firstTurnPayload.interaction.answerMode, "single_choice");
+  assert.ok(firstTurnPayload.interaction.options.length >= 2);
 
-  const saved = await request(`/projects/${project.id}`, {
-    method: "PATCH",
-    body: JSON.stringify({ workspaceId: workspaceA, html: generatedPayload.html }),
+  const pending = await request(`/projects/${project.id}/interaction`);
+  const pendingPayload = await pending.json();
+  assert.equal(pending.status, 200);
+  assert.equal(pendingPayload.interaction.id, firstTurnPayload.interaction.id);
+  assert.equal(pendingPayload.interaction.status, "waiting");
+
+  const blocked = await request(`/projects/${project.id}/chat`, {
+    method: "POST",
+    body: JSON.stringify({ workspaceId: workspaceA, message: "Continue sans attendre." }),
   });
-  assert.equal(saved.status, 200);
+  assert.equal(blocked.status, 409);
+
+  const resumed = await request(`/projects/${project.id}/interactions/${pendingPayload.interaction.id}/respond`, {
+    method: "POST",
+    body: JSON.stringify({
+      choiceIds: [pendingPayload.interaction.options[0].id],
+      text: "Utilise la palette choisie et continue la création.",
+    }),
+  });
+  assert.equal(resumed.status, 200);
+  const resumedPayload = await resumed.json();
+  assert.match(resumedPayload.project.html, /<html/i);
+  assert.ok(resumedPayload.assistantMessage.content.length > 40);
 
   const chat = await request(`/projects/${project.id}/chat`, {
     method: "POST",
     body: JSON.stringify({ workspaceId: workspaceA, message: "Ajoute un texte explicatif sous le bouton." }),
   });
   assert.equal(chat.status, 200);
-  const chatPayload = await chat.json();
+  let chatPayload = await chat.json();
+  for (let followUpCount = 0; chatPayload.interaction && followUpCount < 3; followUpCount += 1) {
+    const followUp = chatPayload.interaction;
+    assert.notEqual(followUp.answerMode, "secret", "this test should never request a real secret");
+    const answer = {
+      ...(followUp.answerMode === "text" ? {} : { choiceIds: [followUp.options[0].id] }),
+      text: "Applique directement cette amélioration avec une formulation simple.",
+    };
+    const followUpResponse = await request(`/projects/${project.id}/interactions/${followUp.id}/respond`, {
+      method: "POST",
+      body: JSON.stringify(answer),
+    });
+    assert.equal(followUpResponse.status, 200);
+    chatPayload = await followUpResponse.json();
+  }
+  assert.equal(chatPayload.interaction, null, "the assistant should finish the requested improvement after its clarifications");
   assert.match(chatPayload.project.html, /<html/i);
   assert.ok(chatPayload.assistantMessage.content.length > 40);
   const updatedMemory = await (await request(`/projects/${project.id}/memory`)).json();

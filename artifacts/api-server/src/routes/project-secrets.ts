@@ -24,7 +24,10 @@ router.use("/projects", requireAuth);
 const secretNamePattern = /^[A-Za-z_][A-Za-z0-9_.-]{0,79}$/;
 
 function isUniqueViolation(error: unknown) {
-  return typeof error === "object" && error !== null && "code" in error && error.code === "23505";
+  if (typeof error !== "object" || error === null) return false;
+  if ("code" in error && error.code === "23505") return true;
+  if ("cause" in error && error.cause !== error) return isUniqueViolation(error.cause);
+  return false;
 }
 
 function secretVaultUnavailable(res: Response) {
