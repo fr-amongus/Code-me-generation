@@ -17,6 +17,7 @@ export const usersTable = pgTable('users', {
   id: varchar('id')
     .primaryKey()
     .default(sql`gen_random_uuid()`),
+  role: varchar('role', { length: 16 }).notNull().default('user'),
   email: varchar('email').unique(),
   firstName: varchar('first_name'),
   lastName: varchar('last_name'),
@@ -32,6 +33,9 @@ export const usersTable = pgTable('users', {
     .$onUpdate(() => new Date()),
 }, (table) => [
   uniqueIndex('users_username_lower_unique').on(sql`lower(${table.username})`),
+  uniqueIndex('users_single_owner_idx')
+    .on(table.role)
+    .where(sql`${table.role} = 'owner'`),
 ]);
 
 export type UpsertUser = typeof usersTable.$inferInsert;

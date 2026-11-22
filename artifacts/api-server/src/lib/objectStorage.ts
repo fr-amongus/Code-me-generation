@@ -41,6 +41,53 @@ export class ObjectNotFoundError extends Error {
 export class ObjectStorageService {
   constructor() {}
 
+  async createPrivateUploadURL(prefix: string): Promise<{ uploadURL: string; objectPath: string }> {
+    const segments = prefix.split('/');
+    if (
+      !segments.length ||
+      segments.some((segment) => !/^[A-Za-z0-9._-]{1,120}$/.test(segment) || segment === '.' || segment === '..')
+    ) {
+      throw new Error('Invalid private object prefix');
+    }
+    const objectName = `${segments.join('/')}/${randomUUID()}`;
+    const fullPath = `${this.getPrivateObjectDir()}/${objectName}`;
+    const { bucketName, objectName: storageObjectName } = parseObjectPath(fullPath);
+    const uploadURL = await signObjectURL({
+      bucketName,
+      objectName: storageObjectName,
+      method: 'PUT',
+      ttlSec: 900,
+    });
+    return { uploadURL, objectPath: `/objects/${objectName}` };
+  }
+
+  async savePrivateObjectEntity(
+    objectPath: string,
+    contents: string | Buffer,
+    contentType: string,
+  ): Promise<void> {
+    if (!objectPath.startsWith('/objects/')) throw new ObjectNotFoundError();
+    const entityPath = objectPath.slice('/objects/'.length);
+    const { bucketName, objectName } = parseObjectPath(`${this.getPrivateObjectDir()}/${entityPath}`);
+    await objectStorageClient.bucket(bucketName).file(objectName).save(contents, {
+      resumable: false,
+      metadata: {
+        contentType,
+        cacheControl: 'private, no-store',
+      },
+    });
+  }
+
+  async readPrivateObjectEntity(objectPath: string): Promise<{ contents: Buffer; contentType: string }> {
+    const file = await this.getObjectEntityFile(objectPath);
+    const [contents] = await file.download();
+    const [metadata] = await file.getMetadata();
+    return {
+      contents,
+      contentType: typeof metadata.contentType === 'string' ? metadata.contentType : 'application/octet-stream',
+    };
+  }
+
   getPublicObjectSearchPaths(): Array<string> {
     const pathsStr = process.env.PUBLIC_OBJECT_SEARCH_PATHS || '';
     const paths = Array.from(

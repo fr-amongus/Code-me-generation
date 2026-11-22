@@ -138,6 +138,407 @@ export const LogoutAccountResponse = zod.object({
 
 
 /**
+ * @summary Get owner access and bootstrap availability
+ */
+export const GetAdminAccessResponse = zod.object({
+  "isOwnerAdmin": zod.boolean(),
+  "bootstrapAvailable": zod.boolean()
+})
+
+
+/**
+ * @summary Claim the one-time owner administrator role
+ */
+export const claimOwnerAdminBodyTokenMin = 32;
+export const claimOwnerAdminBodyTokenMax = 256;
+
+
+
+export const ClaimOwnerAdminBody = zod.object({
+  "token": zod.string().min(claimOwnerAdminBodyTokenMin).max(claimOwnerAdminBodyTokenMax)
+})
+
+export const ClaimOwnerAdminResponse = zod.object({
+  "isOwnerAdmin": zod.boolean(),
+  "bootstrapAvailable": zod.boolean()
+})
+
+
+/**
+ * @summary View account list and recorded AI usage
+ */
+export const getAdminDashboardQueryPeriodDefault = `30d`;
+
+export const GetAdminDashboardQueryParams = zod.object({
+  "period": zod.enum(['7d', '30d', '90d']).default(getAdminDashboardQueryPeriodDefault)
+})
+
+export const GetAdminDashboardResponse = zod.object({
+  "period": zod.enum(['7d', '30d', '90d']),
+  "totalUsers": zod.number(),
+  "trackedCalls": zod.number(),
+  "tokenReportedCalls": zod.number(),
+  "reportedTokens": zod.number(),
+  "users": zod.array(zod.object({
+  "id": zod.string(),
+  "username": zod.string().nullable(),
+  "createdAt": zod.coerce.date(),
+  "calls": zod.number(),
+  "callSharePercent": zod.number(),
+  "tokenCount": zod.number(),
+  "tokenCallCount": zod.number(),
+  "tokenSharePercent": zod.number()
+}))
+})
+
+
+/**
+ * @summary List feature release states
+ */
+export const ListAdminFeaturesResponse = zod.object({
+  "features": zod.array(zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "audience": zod.enum(['all', 'admin']),
+  "defaultAudience": zod.enum(['all', 'admin']),
+  "updatedAt": zod.coerce.date().nullable()
+}))
+})
+
+
+/**
+ * @summary Release a feature to all accounts or admins only
+ */
+export const updateAdminFeaturePathKeyMax = 80;
+
+
+
+export const UpdateAdminFeatureParams = zod.object({
+  "key": zod.coerce.string().min(1).max(updateAdminFeaturePathKeyMax)
+})
+
+export const UpdateAdminFeatureBody = zod.object({
+  "audience": zod.enum(['all', 'admin'])
+})
+
+export const UpdateAdminFeatureResponse = zod.object({
+  "key": zod.string(),
+  "label": zod.string(),
+  "audience": zod.enum(['all', 'admin']),
+  "defaultAudience": zod.enum(['all', 'admin']),
+  "updatedAt": zod.coerce.date().nullable()
+})
+
+
+/**
+ * @summary List features available to the current visitor
+ */
+export const ListAvailableFeaturesResponse = zod.object({
+  "features": zod.array(zod.object({
+  "key": zod.string(),
+  "enabled": zod.boolean()
+}))
+})
+
+
+/**
+ * @summary Request a private Auto-code attachment upload URL
+ */
+export const requestAutoCodeUploadUrlBodyNameMax = 200;
+
+export const requestAutoCodeUploadUrlBodyContentTypeMax = 120;
+
+export const requestAutoCodeUploadUrlBodySizeMax = 10485760;
+
+
+
+export const RequestAutoCodeUploadUrlBody = zod.object({
+  "name": zod.string().min(1).max(requestAutoCodeUploadUrlBodyNameMax),
+  "contentType": zod.string().min(1).max(requestAutoCodeUploadUrlBodyContentTypeMax),
+  "size": zod.number().min(1).max(requestAutoCodeUploadUrlBodySizeMax)
+})
+
+export const RequestAutoCodeUploadUrlResponse = zod.object({
+  "uploadId": zod.number(),
+  "uploadUrl": zod.string()
+})
+
+
+/**
+ * @summary List proposals created by the current account
+ */
+export const ListAutoCodeProposalsResponse = zod.object({
+  "proposals": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "status": zod.enum(['draft', 'pending_review', 'approved', 'rejected', 'applied']),
+  "latestVersion": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "submittedAt": zod.coerce.date().nullable()
+}))
+})
+
+
+/**
+ * @summary Create a staged platform improvement proposal
+ */
+export const createAutoCodeProposalBodyMessageMin = 3;
+export const createAutoCodeProposalBodyMessageMax = 12000;
+
+export const createAutoCodeProposalBodyUploadIdsMax = 5;
+
+
+
+export const CreateAutoCodeProposalBody = zod.object({
+  "message": zod.string().min(createAutoCodeProposalBodyMessageMin).max(createAutoCodeProposalBodyMessageMax),
+  "uploadIds": zod.array(zod.number()).max(createAutoCodeProposalBodyUploadIdsMax).optional()
+})
+
+export const CreateAutoCodeProposalResponse = zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "status": zod.enum(['draft', 'pending_review', 'approved', 'rejected', 'applied']),
+  "latestVersion": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "submittedAt": zod.coerce.date().nullable()
+}).and(zod.object({
+  "messages": zod.array(zod.object({
+  "id": zod.number(),
+  "role": zod.enum(['user', 'assistant']),
+  "content": zod.string(),
+  "createdAt": zod.coerce.date()
+})),
+  "versions": zod.array(zod.object({
+  "id": zod.number(),
+  "version": zod.number(),
+  "summary": zod.string(),
+  "changedFiles": zod.array(zod.string()),
+  "addedFiles": zod.array(zod.string()),
+  "deletedFiles": zod.array(zod.string()),
+  "createdAt": zod.coerce.date()
+}))
+}))
+
+
+/**
+ * @summary View one proposal owned by the current account
+ */
+export const GetAutoCodeProposalParams = zod.object({
+  "id": zod.coerce.number().int()
+})
+
+export const GetAutoCodeProposalResponse = zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "status": zod.enum(['draft', 'pending_review', 'approved', 'rejected', 'applied']),
+  "latestVersion": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "submittedAt": zod.coerce.date().nullable()
+}).and(zod.object({
+  "messages": zod.array(zod.object({
+  "id": zod.number(),
+  "role": zod.enum(['user', 'assistant']),
+  "content": zod.string(),
+  "createdAt": zod.coerce.date()
+})),
+  "versions": zod.array(zod.object({
+  "id": zod.number(),
+  "version": zod.number(),
+  "summary": zod.string(),
+  "changedFiles": zod.array(zod.string()),
+  "addedFiles": zod.array(zod.string()),
+  "deletedFiles": zod.array(zod.string()),
+  "createdAt": zod.coerce.date()
+}))
+}))
+
+
+/**
+ * @summary Refine a draft proposal with another chat message
+ */
+export const SendAutoCodeProposalMessageParams = zod.object({
+  "id": zod.coerce.number().int()
+})
+
+export const sendAutoCodeProposalMessageBodyMessageMin = 3;
+export const sendAutoCodeProposalMessageBodyMessageMax = 12000;
+
+export const sendAutoCodeProposalMessageBodyUploadIdsMax = 5;
+
+
+
+export const SendAutoCodeProposalMessageBody = zod.object({
+  "message": zod.string().min(sendAutoCodeProposalMessageBodyMessageMin).max(sendAutoCodeProposalMessageBodyMessageMax),
+  "uploadIds": zod.array(zod.number()).max(sendAutoCodeProposalMessageBodyUploadIdsMax).optional()
+})
+
+export const SendAutoCodeProposalMessageResponse = zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "status": zod.enum(['draft', 'pending_review', 'approved', 'rejected', 'applied']),
+  "latestVersion": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "submittedAt": zod.coerce.date().nullable()
+}).and(zod.object({
+  "messages": zod.array(zod.object({
+  "id": zod.number(),
+  "role": zod.enum(['user', 'assistant']),
+  "content": zod.string(),
+  "createdAt": zod.coerce.date()
+})),
+  "versions": zod.array(zod.object({
+  "id": zod.number(),
+  "version": zod.number(),
+  "summary": zod.string(),
+  "changedFiles": zod.array(zod.string()),
+  "addedFiles": zod.array(zod.string()),
+  "deletedFiles": zod.array(zod.string()),
+  "createdAt": zod.coerce.date()
+}))
+}))
+
+
+/**
+ * @summary Send a proposal draft to the owner for review
+ */
+export const SubmitAutoCodeProposalParams = zod.object({
+  "id": zod.coerce.number().int()
+})
+
+export const SubmitAutoCodeProposalResponse = zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "status": zod.enum(['draft', 'pending_review', 'approved', 'rejected', 'applied']),
+  "latestVersion": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "submittedAt": zod.coerce.date().nullable()
+})
+
+
+/**
+ * @summary List all platform improvement proposals
+ */
+export const ListAdminAutoCodeProposalsResponse = zod.object({
+  "proposals": zod.array(zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "status": zod.enum(['draft', 'pending_review', 'approved', 'rejected', 'applied']),
+  "latestVersion": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "submittedAt": zod.coerce.date().nullable()
+}).and(zod.object({
+  "ownerUsername": zod.string().nullable()
+})))
+})
+
+
+/**
+ * @summary Inspect a proposal's notes and complete source tree
+ */
+export const GetAdminAutoCodeProposalParams = zod.object({
+  "id": zod.coerce.number().int()
+})
+
+export const GetAdminAutoCodeProposalResponse = zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "status": zod.enum(['draft', 'pending_review', 'approved', 'rejected', 'applied']),
+  "latestVersion": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "submittedAt": zod.coerce.date().nullable()
+}).and(zod.object({
+  "messages": zod.array(zod.object({
+  "id": zod.number(),
+  "role": zod.enum(['user', 'assistant']),
+  "content": zod.string(),
+  "createdAt": zod.coerce.date()
+})),
+  "versions": zod.array(zod.object({
+  "id": zod.number(),
+  "version": zod.number(),
+  "summary": zod.string(),
+  "changedFiles": zod.array(zod.string()),
+  "addedFiles": zod.array(zod.string()),
+  "deletedFiles": zod.array(zod.string()),
+  "createdAt": zod.coerce.date()
+}))
+})).and(zod.object({
+  "ownerUsername": zod.string().nullable(),
+  "files": zod.array(zod.object({
+  "path": zod.string(),
+  "action": zod.enum(['context', 'added', 'modified', 'deleted'])
+})),
+  "notesMarkdown": zod.string(),
+  "previewHtml": zod.string(),
+  "attachments": zod.array(zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "contentType": zod.string(),
+  "size": zod.number()
+})),
+  "reviewNote": zod.string().nullable()
+}))
+
+
+/**
+ * @summary Read one file from the isolated proposal snapshot
+ */
+
+export const readAdminAutoCodeProposalFileBodyPathMax = 500;
+
+
+
+export const ReadAdminAutoCodeProposalFileBody = zod.object({
+  "proposalId": zod.number().min(1),
+  "path": zod.string().min(1).max(readAdminAutoCodeProposalFileBodyPathMax)
+})
+
+export const ReadAdminAutoCodeProposalFileResponse = zod.object({
+  "path": zod.string(),
+  "action": zod.enum(['context', 'added', 'modified', 'deleted']),
+  "content": zod.string(),
+  "originalContent": zod.string().nullable()
+})
+
+
+/**
+ * @summary Approve, reject, or mark a proposal applied in Replit
+ */
+export const ReviewAdminAutoCodeProposalParams = zod.object({
+  "id": zod.coerce.number().int()
+})
+
+export const reviewAdminAutoCodeProposalBodyNoteMax = 4000;
+
+
+
+export const ReviewAdminAutoCodeProposalBody = zod.object({
+  "decision": zod.enum(['approve', 'reject', 'mark_applied']),
+  "note": zod.string().max(reviewAdminAutoCodeProposalBodyNoteMax).optional()
+})
+
+export const ReviewAdminAutoCodeProposalResponse = zod.object({
+  "proposal": zod.object({
+  "id": zod.number(),
+  "title": zod.string(),
+  "status": zod.enum(['draft', 'pending_review', 'approved', 'rejected', 'applied']),
+  "latestVersion": zod.number(),
+  "createdAt": zod.coerce.date(),
+  "updatedAt": zod.coerce.date(),
+  "submittedAt": zod.coerce.date().nullable()
+}),
+  "reviewNote": zod.string().nullable()
+})
+
+
+/**
  * @summary List saved projects for a workspace
  */
 export const listProjectsQueryWorkspaceIdMin = 8;

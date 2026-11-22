@@ -28,6 +28,7 @@ import {
 } from "@workspace/db";
 import { GoogleGenAI } from "@google/genai";
 import { hydrateAttachments } from "../lib/attachment-content";
+import { recordAiUsage } from "../lib/ai-usage";
 import { ensureBrowserDependencies } from "../lib/browser-dependencies";
 import { callGroq } from "../lib/groq";
 import { encryptSecretValue, SecretVaultConfigurationError } from "../lib/secret-vault";
@@ -301,9 +302,10 @@ async function generateChatOutput(
   let rawOutput = "";
   let lastGroqError: unknown;
   let providerUsed: "gemini" | "groq1" | "groq2" | "groq-fallback" = provider;
+  let usage: { provider: string; model: string; inputTokens: number | null; outputTokens: number | null; totalTokens: number | null } | undefined;
   for (let index = 0; index < groqCandidates.length && !rawOutput; index += 1) {
     try {
-      rawOutput = await callGroq({
+      const completion = await callGroq({
         apiKey: groqCandidates[index],
         messages: [
           { role: "system", content: CHAT_SYSTEM_PROMPT },
@@ -312,6 +314,14 @@ async function generateChatOutput(
         maxTokens: 6000,
         json: true,
       });
+      rawOutput = completion.content;
+      usage = {
+        provider: index === 0 ? provider : provider === "groq1" ? "groq2" : "groq1",
+        model: completion.model,
+        inputTokens: completion.inputTokens,
+        outputTokens: completion.outputTokens,
+        totalTokens: completion.totalTokens,
+      };
       if (index > 0) providerUsed = "groq-fallback";
     } catch (groqError) {
       lastGroqError = groqError;
@@ -339,13 +349,20 @@ async function generateChatOutput(
     });
     rawOutput = response.text ?? "";
     providerUsed = "gemini";
+    usage = {
+      provider: "gemini",
+      model: "gemini-3-flash-preview",
+      inputTokens: response.usageMetadata?.promptTokenCount ?? null,
+      outputTokens: response.usageMetadata?.candidatesTokenCount ?? null,
+      totalTokens: response.usageMetadata?.totalTokenCount ?? null,
+    };
   }
 
   const output = parseChatOutput(rawOutput);
   if (!output?.message || (output.type === "complete" && !output.html.toLowerCase().includes("<html"))) {
     throw new SyntaxError("The chat provider returned no usable output.");
   }
-  return { output, providerUsed };
+  return { output, providerUsed, usage };
 }
 
 async function generateProjectTurn(
@@ -614,6 +631,13 @@ router.post("/projects/:projectId/chat", async (req, res): Promise<void> => {
 
   try {
     const generated = await generateProjectTurn(project, body.data.message, body.data.attachments);
+    if (generated.usage) {
+      try {
+        await recordAiUsage({ userId: req.user.id, operation: "project-chat", ...generated.usage });
+      } catch (error) {
+        req.log.warn({ err: error }, "Could not record AI usage metadata");
+      }
+    }
     req.log.info({ provider: generated.providerUsed, interaction: generated.output.type === "interaction" }, "Project chat turn completed");
     const storedUserMessage = body.data.attachments?.length
       ? `${body.data.message}\n\n[${body.data.attachments.length} pièce(s) jointe(s): ${body.data.attachments.map((attachment) => attachment.name).join(", ")}]`
@@ -784,6 +808,13 @@ router.post("/projects/:projectId/interactions/:interactionId/respond", async (r
 
   try {
     const generated = await generateProjectTurn(project, aiMessage, undefined);
+    if (generated.usage) {
+      try {
+        await recordAiUsage({ userId: req.user.id, operation: "project-chat", ...generated.usage });
+      } catch (error) {
+        req.log.warn({ err: error }, "Could not record AI usage metadata");
+      }
+    }
     req.log.info({ provider: generated.providerUsed, interaction: generated.output.type === "interaction" }, "Project interaction resumed");
     const result = await saveChatTurn(project, storedUserContent, generated.output, {
       previousInteraction: { id: interaction.id, answer },

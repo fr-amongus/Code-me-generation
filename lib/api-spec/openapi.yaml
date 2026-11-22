@@ -18,6 +18,10 @@ tags:
     description: Project improvement conversations
   - name: auth
     description: Code Me account and session operations
+  - name: admin
+    description: Owner-only administration and feature release controls
+  - name: autocode
+    description: Isolated platform improvement proposals
 paths:
   /healthz:
     get:
@@ -159,6 +163,459 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AuthLogout"
+  /admin/access:
+    get:
+      operationId: getAdminAccess
+      tags: [admin]
+      summary: Get owner access and bootstrap availability
+      responses:
+        "200":
+          description: Admin access state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminAccess"
+        "401":
+          description: Sign-in required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /admin/bootstrap/claim:
+    post:
+      operationId: claimOwnerAdmin
+      tags: [admin]
+      summary: Claim the one-time owner administrator role
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminBootstrapInput"
+      responses:
+        "200":
+          description: Owner role claimed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminAccess"
+        "400":
+          description: Invalid bootstrap request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "401":
+          description: Sign-in required or token invalid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: Owner role already claimed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /admin/dashboard:
+    get:
+      operationId: getAdminDashboard
+      tags: [admin]
+      summary: View account list and recorded AI usage
+      parameters:
+        - name: period
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [7d, 30d, 90d]
+            default: 30d
+      responses:
+        "200":
+          description: Users and privacy-safe AI usage totals
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminDashboard"
+        "403":
+          description: Owner administrator required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /admin/features:
+    get:
+      operationId: listAdminFeatures
+      tags: [admin]
+      summary: List feature release states
+      responses:
+        "200":
+          description: Feature audience settings
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeatureReleaseList"
+        "403":
+          description: Owner administrator required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /admin/features/{key}:
+    patch:
+      operationId: updateAdminFeature
+      tags: [admin]
+      summary: Release a feature to all accounts or admins only
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 80
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FeatureReleaseInput"
+      responses:
+        "200":
+          description: Updated feature audience
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeatureRelease"
+        "400":
+          description: Invalid audience or feature
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Owner administrator required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /features:
+    get:
+      operationId: listAvailableFeatures
+      tags: [admin]
+      summary: List features available to the current visitor
+      responses:
+        "200":
+          description: Public feature access flags
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FeatureAccessList"
+  /autocode/uploads/request-url:
+    post:
+      operationId: requestAutoCodeUploadUrl
+      tags: [autocode]
+      summary: Request a private Auto-code attachment upload URL
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutoCodeUploadInput"
+      responses:
+        "200":
+          description: Private upload location
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutoCodeUploadUrl"
+        "400":
+          description: Invalid or unsupported attachment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "401":
+          description: Sign-in required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /autocode/proposals:
+    get:
+      operationId: listAutoCodeProposals
+      tags: [autocode]
+      summary: List proposals created by the current account
+      responses:
+        "200":
+          description: The account's proposals
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutoCodeProposalList"
+        "401":
+          description: Sign-in required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    post:
+      operationId: createAutoCodeProposal
+      tags: [autocode]
+      summary: Create a staged platform improvement proposal
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutoCodeProposalInput"
+      responses:
+        "201":
+          description: Draft proposal and AI response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutoCodeProposalDetail"
+        "400":
+          description: Invalid prompt or attachment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "401":
+          description: Sign-in required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: Too many AI requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /autocode/proposals/{id}:
+    get:
+      operationId: getAutoCodeProposal
+      tags: [autocode]
+      summary: View one proposal owned by the current account
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Proposal conversation and versions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutoCodeProposalDetail"
+        "404":
+          description: Proposal not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /autocode/proposals/{id}/messages:
+    post:
+      operationId: sendAutoCodeProposalMessage
+      tags: [autocode]
+      summary: Refine a draft proposal with another chat message
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutoCodeProposalInput"
+      responses:
+        "200":
+          description: Updated proposal draft
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutoCodeProposalDetail"
+        "400":
+          description: Invalid prompt or attachment
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: Proposal not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: Proposal is locked for review
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "429":
+          description: Too many AI requests
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /autocode/proposals/{id}/submit:
+    post:
+      operationId: submitAutoCodeProposal
+      tags: [autocode]
+      summary: Send a proposal draft to the owner for review
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Proposal submitted for review
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutoCodeProposalSummary"
+        "404":
+          description: Proposal not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: Proposal has no generated version
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /admin/autocode/proposals:
+    get:
+      operationId: listAdminAutoCodeProposals
+      tags: [admin, autocode]
+      summary: List all platform improvement proposals
+      responses:
+        "200":
+          description: Proposals available to the owner
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutoCodeAdminProposalList"
+        "403":
+          description: Owner administrator required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /admin/autocode/proposals/{id}:
+    get:
+      operationId: getAdminAutoCodeProposal
+      tags: [admin, autocode]
+      summary: Inspect a proposal's notes and complete source tree
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Proposal detail for owner review
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutoCodeAdminProposalDetail"
+        "404":
+          description: Proposal not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Owner administrator required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /admin/autocode/proposal-file:
+    post:
+      operationId: readAdminAutoCodeProposalFile
+      tags: [admin, autocode]
+      summary: Read one file from the isolated proposal snapshot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutoCodeFileInput"
+      responses:
+        "200":
+          description: File contents and original version when changed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutoCodeFileContent"
+        "404":
+          description: Proposal file not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "403":
+          description: Owner administrator required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /admin/autocode/proposals/{id}/review:
+    post:
+      operationId: reviewAdminAutoCodeProposal
+      tags: [admin, autocode]
+      summary: Approve, reject, or mark a proposal applied in Replit
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AutoCodeReviewInput"
+      responses:
+        "200":
+          description: Review decision saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutoCodeReviewResult"
+        "400":
+          description: Invalid review decision
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: Proposal not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "409":
+          description: Proposal is not in a reviewable state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
   /projects:
     get:
       operationId: listProjects
@@ -1220,4 +1677,329 @@ components:
           items:
             type: string
       required: [command, output, exitCode, allowedCommands]
+    AdminAccess:
+      type: object
+      properties:
+        isOwnerAdmin:
+          type: boolean
+        bootstrapAvailable:
+          type: boolean
+      required: [isOwnerAdmin, bootstrapAvailable]
+    AdminBootstrapInput:
+      type: object
+      properties:
+        token:
+          type: string
+          minLength: 32
+          maxLength: 256
+      required: [token]
+    AdminUsageUser:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        calls:
+          type: number
+        callSharePercent:
+          type: number
+        tokenCount:
+          type: number
+        tokenCallCount:
+          type: number
+        tokenSharePercent:
+          type: number
+      required: [id, username, createdAt, calls, callSharePercent, tokenCount, tokenCallCount, tokenSharePercent]
+    AdminDashboard:
+      type: object
+      properties:
+        period:
+          type: string
+          enum: [7d, 30d, 90d]
+        totalUsers:
+          type: number
+        trackedCalls:
+          type: number
+        tokenReportedCalls:
+          type: number
+        reportedTokens:
+          type: number
+        users:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminUsageUser"
+      required: [period, totalUsers, trackedCalls, tokenReportedCalls, reportedTokens, users]
+    FeatureRelease:
+      type: object
+      properties:
+        key:
+          type: string
+        label:
+          type: string
+        audience:
+          type: string
+          enum: [all, admin]
+        defaultAudience:
+          type: string
+          enum: [all, admin]
+        updatedAt:
+          type: ["string", "null"]
+          format: date-time
+      required: [key, label, audience, defaultAudience, updatedAt]
+    FeatureReleaseInput:
+      type: object
+      properties:
+        audience:
+          type: string
+          enum: [all, admin]
+      required: [audience]
+    FeatureReleaseList:
+      type: object
+      properties:
+        features:
+          type: array
+          items:
+            $ref: "#/components/schemas/FeatureRelease"
+      required: [features]
+    FeatureAccess:
+      type: object
+      properties:
+        key:
+          type: string
+        enabled:
+          type: boolean
+      required: [key, enabled]
+    FeatureAccessList:
+      type: object
+      properties:
+        features:
+          type: array
+          items:
+            $ref: "#/components/schemas/FeatureAccess"
+      required: [features]
+    AutoCodeUploadInput:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        contentType:
+          type: string
+          minLength: 1
+          maxLength: 120
+        size:
+          type: number
+          minimum: 1
+          maximum: 10485760
+      required: [name, contentType, size]
+    AutoCodeUploadUrl:
+      type: object
+      properties:
+        uploadId:
+          type: number
+        uploadUrl:
+          type: string
+      required: [uploadId, uploadUrl]
+    AutoCodeProposalInput:
+      type: object
+      properties:
+        message:
+          type: string
+          minLength: 3
+          maxLength: 12000
+        uploadIds:
+          type: array
+          maxItems: 5
+          items:
+            type: number
+      required: [message]
+    AutoCodeProposalSummary:
+      type: object
+      properties:
+        id:
+          type: number
+        title:
+          type: string
+        status:
+          type: string
+          enum: [draft, pending_review, approved, rejected, applied]
+        latestVersion:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        submittedAt:
+          type: ["string", "null"]
+          format: date-time
+      required: [id, title, status, latestVersion, createdAt, updatedAt, submittedAt]
+    AutoCodeProposalMessage:
+      type: object
+      properties:
+        id:
+          type: number
+        role:
+          type: string
+          enum: [user, assistant]
+        content:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, role, content, createdAt]
+    AutoCodeProposalVersion:
+      type: object
+      properties:
+        id:
+          type: number
+        version:
+          type: number
+        summary:
+          type: string
+        changedFiles:
+          type: array
+          items:
+            type: string
+        addedFiles:
+          type: array
+          items:
+            type: string
+        deletedFiles:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+      required: [id, version, summary, changedFiles, addedFiles, deletedFiles, createdAt]
+    AutoCodeProposalDetail:
+      allOf:
+        - $ref: "#/components/schemas/AutoCodeProposalSummary"
+        - type: object
+          properties:
+            messages:
+              type: array
+              items:
+                $ref: "#/components/schemas/AutoCodeProposalMessage"
+            versions:
+              type: array
+              items:
+                $ref: "#/components/schemas/AutoCodeProposalVersion"
+          required: [messages, versions]
+    AutoCodeProposalList:
+      type: object
+      properties:
+        proposals:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutoCodeProposalSummary"
+      required: [proposals]
+    AutoCodeAdminProposalSummary:
+      allOf:
+        - $ref: "#/components/schemas/AutoCodeProposalSummary"
+        - type: object
+          properties:
+            ownerUsername:
+              type: ["string", "null"]
+          required: [ownerUsername]
+    AutoCodeAdminProposalList:
+      type: object
+      properties:
+        proposals:
+          type: array
+          items:
+            $ref: "#/components/schemas/AutoCodeAdminProposalSummary"
+      required: [proposals]
+    AutoCodeProposalFile:
+      type: object
+      properties:
+        path:
+          type: string
+        action:
+          type: string
+          enum: [context, added, modified, deleted]
+      required: [path, action]
+    AutoCodeProposalAttachment:
+      type: object
+      properties:
+        id:
+          type: number
+        name:
+          type: string
+        contentType:
+          type: string
+        size:
+          type: number
+      required: [id, name, contentType, size]
+    AutoCodeAdminProposalDetail:
+      allOf:
+        - $ref: "#/components/schemas/AutoCodeProposalDetail"
+        - type: object
+          properties:
+            ownerUsername:
+              type: ["string", "null"]
+            files:
+              type: array
+              items:
+                $ref: "#/components/schemas/AutoCodeProposalFile"
+            notesMarkdown:
+              type: string
+            previewHtml:
+              type: string
+            attachments:
+              type: array
+              items:
+                $ref: "#/components/schemas/AutoCodeProposalAttachment"
+            reviewNote:
+              type: ["string", "null"]
+          required: [ownerUsername, files, notesMarkdown, previewHtml, attachments, reviewNote]
+    AutoCodeFileContent:
+      type: object
+      properties:
+        path:
+          type: string
+        action:
+          type: string
+          enum: [context, added, modified, deleted]
+        content:
+          type: string
+        originalContent:
+          type: ["string", "null"]
+      required: [path, action, content, originalContent]
+    AutoCodeFileInput:
+      type: object
+      properties:
+        proposalId:
+          type: number
+          minimum: 1
+        path:
+          type: string
+          minLength: 1
+          maxLength: 500
+      required: [proposalId, path]
+    AutoCodeReviewInput:
+      type: object
+      properties:
+        decision:
+          type: string
+          enum: [approve, reject, mark_applied]
+        note:
+          type: string
+          maxLength: 4000
+      required: [decision]
+    AutoCodeReviewResult:
+      type: object
+      properties:
+        proposal:
+          $ref: "#/components/schemas/AutoCodeProposalSummary"
+        reviewNote:
+          type: ["string", "null"]
+      required: [proposal, reviewNote]
 

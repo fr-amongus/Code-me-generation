@@ -3,12 +3,71 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build as esbuild } from "esbuild";
 import esbuildPluginPino from "esbuild-plugin-pino";
-import { rm } from "node:fs/promises";
+import { readdir, readFile, rm, writeFile } from "node:fs/promises";
 
 // Plugins (e.g. 'esbuild-plugin-pino') may use `require` to resolve dependencies
 globalThis.require = createRequire(import.meta.url);
 
 const artifactDir = path.dirname(fileURLToPath(import.meta.url));
+const workspaceRoot = path.resolve(artifactDir, "../..");
+const platformSourceRoots = [
+  "artifacts/code-me-generation/src",
+  "artifacts/api-server/src",
+  "lib/db/src",
+  "lib/api-client-react/src/generated",
+  "lib/api-zod/src/generated",
+];
+const platformSourceFiles = [
+  "lib/api-spec/openapi.yaml",
+  "artifacts/code-me-generation/package.json",
+  "artifacts/api-server/package.json",
+];
+const sourceExtensions = new Set([".ts", ".tsx", ".css", ".json", ".yaml", ".yml", ".md"]);
+
+async function collectPlatformSource(rootPath, relativeRoot, files) {
+  let entries;
+  try {
+    entries = await readdir(rootPath, { withFileTypes: true });
+  } catch {
+    return;
+  }
+  for (const entry of entries) {
+    if (entry.name.startsWith(".") || entry.name === "node_modules" || entry.name === "test") continue;
+    const absolutePath = path.join(rootPath, entry.name);
+    const relativePath = path.posix.join(relativeRoot, entry.name);
+    if (entry.isDirectory()) {
+      await collectPlatformSource(absolutePath, relativePath, files);
+      continue;
+    }
+    if (!entry.isFile() || !sourceExtensions.has(path.extname(entry.name))) continue;
+    const contents = await readFile(absolutePath, "utf8");
+    if (Buffer.byteLength(contents, "utf8") > 700_000) continue;
+    files.push({ path: relativePath, content: contents });
+  }
+}
+
+async function writePlatformSourceManifest(distDir) {
+  const files = [];
+  for (const relativeRoot of platformSourceRoots) {
+    await collectPlatformSource(path.join(workspaceRoot, relativeRoot), relativeRoot, files);
+  }
+  for (const relativePath of platformSourceFiles) {
+    try {
+      files.push({
+        path: relativePath,
+        content: await readFile(path.join(workspaceRoot, relativePath), "utf8"),
+      });
+    } catch {
+      // Optional source groups may not exist in every workspace checkout.
+    }
+  }
+  files.sort((a, b) => a.path.localeCompare(b.path));
+  await writeFile(
+    path.join(distDir, "platform-source.json"),
+    JSON.stringify({ version: 1, files }),
+    "utf8",
+  );
+}
 
 async function buildAll() {
   const distDir = path.resolve(artifactDir, "dist");
@@ -118,6 +177,7 @@ globalThis.__dirname = __bannerPath.dirname(globalThis.__filename);
     `,
     },
   });
+  await writePlatformSourceManifest(distDir);
 }
 
 buildAll().catch((err) => {

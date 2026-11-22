@@ -1,4 +1,11 @@
 export type GroqMessage = { role: "system" | "user"; content: string };
+export type GroqCompletion = {
+  content: string;
+  model: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+};
 
 export class GroqRequestError extends Error {
   constructor(public readonly status: number, message: string) {
@@ -38,6 +45,12 @@ export async function callGroq(options: {
     const body = await response.json().catch(() => ({})) as {
       error?: { message?: string };
       choices?: Array<{ message?: { content?: string } }>;
+      model?: string;
+      usage?: {
+        prompt_tokens?: number;
+        completion_tokens?: number;
+        total_tokens?: number;
+      };
     };
     if (!response.ok) {
       lastError = new GroqRequestError(response.status, body.error?.message ?? `Groq request failed with status ${response.status}`);
@@ -46,7 +59,13 @@ export async function callGroq(options: {
     }
     const content = body.choices?.[0]?.message?.content?.trim();
     if (!content) throw new GroqRequestError(502, "Groq returned an empty response");
-    return content;
+    return {
+      content,
+      model: body.model || model,
+      inputTokens: body.usage?.prompt_tokens ?? null,
+      outputTokens: body.usage?.completion_tokens ?? null,
+      totalTokens: body.usage?.total_tokens ?? null,
+    };
   }
   throw lastError ?? new GroqRequestError(502, "No Groq model is available");
 }

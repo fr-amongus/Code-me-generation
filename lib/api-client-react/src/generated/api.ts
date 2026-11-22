@@ -20,13 +20,33 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AdminAccess,
+  AdminBootstrapInput,
+  AdminDashboard,
   ApiError,
   AuthCredentials,
   AuthLogout,
   AuthSession,
+  AutoCodeAdminProposalDetail,
+  AutoCodeAdminProposalList,
+  AutoCodeFileContent,
+  AutoCodeFileInput,
+  AutoCodeProposalDetail,
+  AutoCodeProposalInput,
+  AutoCodeProposalList,
+  AutoCodeProposalSummary,
+  AutoCodeReviewInput,
+  AutoCodeReviewResult,
+  AutoCodeUploadInput,
+  AutoCodeUploadUrl,
   CancelProjectInteractionResult,
+  FeatureAccessList,
+  FeatureRelease,
+  FeatureReleaseInput,
+  FeatureReleaseList,
   GenerateApplicationInput,
   GeneratedApplication,
+  GetAdminDashboardParams,
   HealthStatus,
   ListProjectsParams,
   PendingProjectInteractionResult,
@@ -545,6 +565,1266 @@ export const useLogoutAccount = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getLogoutAccountMutationOptions(options));
+    }
+
+export const getGetAdminAccessUrl = () => {
+
+
+
+
+  return `/api/admin/access`
+}
+
+/**
+ * @summary Get owner access and bootstrap availability
+ */
+export const getAdminAccess = async ( options?: Parameters<typeof customFetch>[1]): Promise<AdminAccess> => {
+
+  return customFetch<AdminAccess>(getGetAdminAccessUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAdminAccessQueryKey = () => {
+    return [
+    `/api/admin/access`
+    ] as const;
+    }
+
+
+export const getGetAdminAccessQueryOptions = <TData = Awaited<ReturnType<typeof getAdminAccess>>, TError = ErrorType<ApiError>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminAccess>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAdminAccessQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminAccess>>> = ({ signal }) => getAdminAccess({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAdminAccess>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAdminAccessQueryResult = NonNullable<Awaited<ReturnType<typeof getAdminAccess>>>
+export type GetAdminAccessQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary Get owner access and bootstrap availability
+ */
+
+export function useGetAdminAccess<TData = Awaited<ReturnType<typeof getAdminAccess>>, TError = ErrorType<ApiError>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminAccess>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAdminAccessQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getClaimOwnerAdminUrl = () => {
+
+
+
+
+  return `/api/admin/bootstrap/claim`
+}
+
+/**
+ * @summary Claim the one-time owner administrator role
+ */
+export const claimOwnerAdmin = async (adminBootstrapInput: AdminBootstrapInput, options?: Parameters<typeof customFetch>[1]): Promise<AdminAccess> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<AdminAccess>(getClaimOwnerAdminUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(adminBootstrapInput)
+  }
+);}
+
+
+
+
+
+export const getClaimOwnerAdminMutationKey = () => ['claimOwnerAdmin'] as const;
+
+export const getClaimOwnerAdminMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof claimOwnerAdmin>>, TError,ClaimOwnerAdminMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof claimOwnerAdmin>>, TError,ClaimOwnerAdminMutationVariables, TContext> => {
+
+const mutationKey = getClaimOwnerAdminMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof claimOwnerAdmin>>, ClaimOwnerAdminMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  claimOwnerAdmin(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ClaimOwnerAdminMutationResult = NonNullable<Awaited<ReturnType<typeof claimOwnerAdmin>>>
+    export type ClaimOwnerAdminMutationBody = BodyType<AdminBootstrapInput>
+    export type ClaimOwnerAdminMutationError = ErrorType<ApiError>
+    export type ClaimOwnerAdminMutationVariables = {data: BodyType<AdminBootstrapInput>}
+
+    /**
+ * @summary Claim the one-time owner administrator role
+ */
+export const useClaimOwnerAdmin = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof claimOwnerAdmin>>, TError,ClaimOwnerAdminMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof claimOwnerAdmin>>,
+        TError,
+        ClaimOwnerAdminMutationVariables,
+        TContext
+      > => {
+      return useMutation(getClaimOwnerAdminMutationOptions(options));
+    }
+
+export const getGetAdminDashboardUrl = (params?: GetAdminDashboardParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/admin/dashboard?${stringifiedParams}` : `/api/admin/dashboard`
+}
+
+/**
+ * @summary View account list and recorded AI usage
+ */
+export const getAdminDashboard = async (params?: GetAdminDashboardParams, options?: Parameters<typeof customFetch>[1]): Promise<AdminDashboard> => {
+
+  return customFetch<AdminDashboard>(getGetAdminDashboardUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAdminDashboardQueryKey = (params?: GetAdminDashboardParams,) => {
+    return [
+    `/api/admin/dashboard`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetAdminDashboardQueryOptions = <TData = Awaited<ReturnType<typeof getAdminDashboard>>, TError = ErrorType<ApiError>>(params?: GetAdminDashboardParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminDashboard>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAdminDashboardQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminDashboard>>> = ({ signal }) => getAdminDashboard(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAdminDashboard>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAdminDashboardQueryResult = NonNullable<Awaited<ReturnType<typeof getAdminDashboard>>>
+export type GetAdminDashboardQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary View account list and recorded AI usage
+ */
+
+export function useGetAdminDashboard<TData = Awaited<ReturnType<typeof getAdminDashboard>>, TError = ErrorType<ApiError>>(
+ params?: GetAdminDashboardParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminDashboard>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAdminDashboardQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListAdminFeaturesUrl = () => {
+
+
+
+
+  return `/api/admin/features`
+}
+
+/**
+ * @summary List feature release states
+ */
+export const listAdminFeatures = async ( options?: Parameters<typeof customFetch>[1]): Promise<FeatureReleaseList> => {
+
+  return customFetch<FeatureReleaseList>(getListAdminFeaturesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAdminFeaturesQueryKey = () => {
+    return [
+    `/api/admin/features`
+    ] as const;
+    }
+
+
+export const getListAdminFeaturesQueryOptions = <TData = Awaited<ReturnType<typeof listAdminFeatures>>, TError = ErrorType<ApiError>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAdminFeatures>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAdminFeaturesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAdminFeatures>>> = ({ signal }) => listAdminFeatures({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAdminFeatures>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAdminFeaturesQueryResult = NonNullable<Awaited<ReturnType<typeof listAdminFeatures>>>
+export type ListAdminFeaturesQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary List feature release states
+ */
+
+export function useListAdminFeatures<TData = Awaited<ReturnType<typeof listAdminFeatures>>, TError = ErrorType<ApiError>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAdminFeatures>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAdminFeaturesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateAdminFeatureUrl = (key: string,) => {
+
+
+
+
+  return `/api/admin/features/${key}`
+}
+
+/**
+ * @summary Release a feature to all accounts or admins only
+ */
+export const updateAdminFeature = async (key: string,
+    featureReleaseInput: FeatureReleaseInput, options?: Parameters<typeof customFetch>[1]): Promise<FeatureRelease> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<FeatureRelease>(getUpdateAdminFeatureUrl(key),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(featureReleaseInput)
+  }
+);}
+
+
+
+
+
+export const getUpdateAdminFeatureMutationKey = () => ['updateAdminFeature'] as const;
+
+export const getUpdateAdminFeatureMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAdminFeature>>, TError,UpdateAdminFeatureMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateAdminFeature>>, TError,UpdateAdminFeatureMutationVariables, TContext> => {
+
+const mutationKey = getUpdateAdminFeatureMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateAdminFeature>>, UpdateAdminFeatureMutationVariables> = (props) => {
+          const {key,data} = props ?? {};
+
+          return  updateAdminFeature(key,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateAdminFeatureMutationResult = NonNullable<Awaited<ReturnType<typeof updateAdminFeature>>>
+    export type UpdateAdminFeatureMutationBody = BodyType<FeatureReleaseInput>
+    export type UpdateAdminFeatureMutationError = ErrorType<ApiError>
+    export type UpdateAdminFeatureMutationVariables = {key: string;data: BodyType<FeatureReleaseInput>}
+
+    /**
+ * @summary Release a feature to all accounts or admins only
+ */
+export const useUpdateAdminFeature = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateAdminFeature>>, TError,UpdateAdminFeatureMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateAdminFeature>>,
+        TError,
+        UpdateAdminFeatureMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUpdateAdminFeatureMutationOptions(options));
+    }
+
+export const getListAvailableFeaturesUrl = () => {
+
+
+
+
+  return `/api/features`
+}
+
+/**
+ * @summary List features available to the current visitor
+ */
+export const listAvailableFeatures = async ( options?: Parameters<typeof customFetch>[1]): Promise<FeatureAccessList> => {
+
+  return customFetch<FeatureAccessList>(getListAvailableFeaturesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAvailableFeaturesQueryKey = () => {
+    return [
+    `/api/features`
+    ] as const;
+    }
+
+
+export const getListAvailableFeaturesQueryOptions = <TData = Awaited<ReturnType<typeof listAvailableFeatures>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAvailableFeatures>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAvailableFeaturesQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAvailableFeatures>>> = ({ signal }) => listAvailableFeatures({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAvailableFeatures>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAvailableFeaturesQueryResult = NonNullable<Awaited<ReturnType<typeof listAvailableFeatures>>>
+export type ListAvailableFeaturesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary List features available to the current visitor
+ */
+
+export function useListAvailableFeatures<TData = Awaited<ReturnType<typeof listAvailableFeatures>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAvailableFeatures>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAvailableFeaturesQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRequestAutoCodeUploadUrlUrl = () => {
+
+
+
+
+  return `/api/autocode/uploads/request-url`
+}
+
+/**
+ * @summary Request a private Auto-code attachment upload URL
+ */
+export const requestAutoCodeUploadUrl = async (autoCodeUploadInput: AutoCodeUploadInput, options?: Parameters<typeof customFetch>[1]): Promise<AutoCodeUploadUrl> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<AutoCodeUploadUrl>(getRequestAutoCodeUploadUrlUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(autoCodeUploadInput)
+  }
+);}
+
+
+
+
+
+export const getRequestAutoCodeUploadUrlMutationKey = () => ['requestAutoCodeUploadUrl'] as const;
+
+export const getRequestAutoCodeUploadUrlMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestAutoCodeUploadUrl>>, TError,RequestAutoCodeUploadUrlMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof requestAutoCodeUploadUrl>>, TError,RequestAutoCodeUploadUrlMutationVariables, TContext> => {
+
+const mutationKey = getRequestAutoCodeUploadUrlMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof requestAutoCodeUploadUrl>>, RequestAutoCodeUploadUrlMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  requestAutoCodeUploadUrl(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RequestAutoCodeUploadUrlMutationResult = NonNullable<Awaited<ReturnType<typeof requestAutoCodeUploadUrl>>>
+    export type RequestAutoCodeUploadUrlMutationBody = BodyType<AutoCodeUploadInput>
+    export type RequestAutoCodeUploadUrlMutationError = ErrorType<ApiError>
+    export type RequestAutoCodeUploadUrlMutationVariables = {data: BodyType<AutoCodeUploadInput>}
+
+    /**
+ * @summary Request a private Auto-code attachment upload URL
+ */
+export const useRequestAutoCodeUploadUrl = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof requestAutoCodeUploadUrl>>, TError,RequestAutoCodeUploadUrlMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof requestAutoCodeUploadUrl>>,
+        TError,
+        RequestAutoCodeUploadUrlMutationVariables,
+        TContext
+      > => {
+      return useMutation(getRequestAutoCodeUploadUrlMutationOptions(options));
+    }
+
+export const getListAutoCodeProposalsUrl = () => {
+
+
+
+
+  return `/api/autocode/proposals`
+}
+
+/**
+ * @summary List proposals created by the current account
+ */
+export const listAutoCodeProposals = async ( options?: Parameters<typeof customFetch>[1]): Promise<AutoCodeProposalList> => {
+
+  return customFetch<AutoCodeProposalList>(getListAutoCodeProposalsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAutoCodeProposalsQueryKey = () => {
+    return [
+    `/api/autocode/proposals`
+    ] as const;
+    }
+
+
+export const getListAutoCodeProposalsQueryOptions = <TData = Awaited<ReturnType<typeof listAutoCodeProposals>>, TError = ErrorType<ApiError>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAutoCodeProposals>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAutoCodeProposalsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAutoCodeProposals>>> = ({ signal }) => listAutoCodeProposals({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAutoCodeProposals>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAutoCodeProposalsQueryResult = NonNullable<Awaited<ReturnType<typeof listAutoCodeProposals>>>
+export type ListAutoCodeProposalsQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary List proposals created by the current account
+ */
+
+export function useListAutoCodeProposals<TData = Awaited<ReturnType<typeof listAutoCodeProposals>>, TError = ErrorType<ApiError>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAutoCodeProposals>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAutoCodeProposalsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateAutoCodeProposalUrl = () => {
+
+
+
+
+  return `/api/autocode/proposals`
+}
+
+/**
+ * @summary Create a staged platform improvement proposal
+ */
+export const createAutoCodeProposal = async (autoCodeProposalInput: AutoCodeProposalInput, options?: Parameters<typeof customFetch>[1]): Promise<AutoCodeProposalDetail> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<AutoCodeProposalDetail>(getCreateAutoCodeProposalUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(autoCodeProposalInput)
+  }
+);}
+
+
+
+
+
+export const getCreateAutoCodeProposalMutationKey = () => ['createAutoCodeProposal'] as const;
+
+export const getCreateAutoCodeProposalMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAutoCodeProposal>>, TError,CreateAutoCodeProposalMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createAutoCodeProposal>>, TError,CreateAutoCodeProposalMutationVariables, TContext> => {
+
+const mutationKey = getCreateAutoCodeProposalMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createAutoCodeProposal>>, CreateAutoCodeProposalMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createAutoCodeProposal(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateAutoCodeProposalMutationResult = NonNullable<Awaited<ReturnType<typeof createAutoCodeProposal>>>
+    export type CreateAutoCodeProposalMutationBody = BodyType<AutoCodeProposalInput>
+    export type CreateAutoCodeProposalMutationError = ErrorType<ApiError>
+    export type CreateAutoCodeProposalMutationVariables = {data: BodyType<AutoCodeProposalInput>}
+
+    /**
+ * @summary Create a staged platform improvement proposal
+ */
+export const useCreateAutoCodeProposal = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createAutoCodeProposal>>, TError,CreateAutoCodeProposalMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createAutoCodeProposal>>,
+        TError,
+        CreateAutoCodeProposalMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateAutoCodeProposalMutationOptions(options));
+    }
+
+export const getGetAutoCodeProposalUrl = (id: number,) => {
+
+
+
+
+  return `/api/autocode/proposals/${id}`
+}
+
+/**
+ * @summary View one proposal owned by the current account
+ */
+export const getAutoCodeProposal = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<AutoCodeProposalDetail> => {
+
+  return customFetch<AutoCodeProposalDetail>(getGetAutoCodeProposalUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAutoCodeProposalQueryKey = (id: number,) => {
+    return [
+    `/api/autocode/proposals/${id}`
+    ] as const;
+    }
+
+
+export const getGetAutoCodeProposalQueryOptions = <TData = Awaited<ReturnType<typeof getAutoCodeProposal>>, TError = ErrorType<ApiError>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAutoCodeProposal>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAutoCodeProposalQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAutoCodeProposal>>> = ({ signal }) => getAutoCodeProposal(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAutoCodeProposal>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAutoCodeProposalQueryResult = NonNullable<Awaited<ReturnType<typeof getAutoCodeProposal>>>
+export type GetAutoCodeProposalQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary View one proposal owned by the current account
+ */
+
+export function useGetAutoCodeProposal<TData = Awaited<ReturnType<typeof getAutoCodeProposal>>, TError = ErrorType<ApiError>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAutoCodeProposal>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAutoCodeProposalQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getSendAutoCodeProposalMessageUrl = (id: number,) => {
+
+
+
+
+  return `/api/autocode/proposals/${id}/messages`
+}
+
+/**
+ * @summary Refine a draft proposal with another chat message
+ */
+export const sendAutoCodeProposalMessage = async (id: number,
+    autoCodeProposalInput: AutoCodeProposalInput, options?: Parameters<typeof customFetch>[1]): Promise<AutoCodeProposalDetail> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<AutoCodeProposalDetail>(getSendAutoCodeProposalMessageUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(autoCodeProposalInput)
+  }
+);}
+
+
+
+
+
+export const getSendAutoCodeProposalMessageMutationKey = () => ['sendAutoCodeProposalMessage'] as const;
+
+export const getSendAutoCodeProposalMessageMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendAutoCodeProposalMessage>>, TError,SendAutoCodeProposalMessageMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof sendAutoCodeProposalMessage>>, TError,SendAutoCodeProposalMessageMutationVariables, TContext> => {
+
+const mutationKey = getSendAutoCodeProposalMessageMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof sendAutoCodeProposalMessage>>, SendAutoCodeProposalMessageMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  sendAutoCodeProposalMessage(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SendAutoCodeProposalMessageMutationResult = NonNullable<Awaited<ReturnType<typeof sendAutoCodeProposalMessage>>>
+    export type SendAutoCodeProposalMessageMutationBody = BodyType<AutoCodeProposalInput>
+    export type SendAutoCodeProposalMessageMutationError = ErrorType<ApiError>
+    export type SendAutoCodeProposalMessageMutationVariables = {id: number;data: BodyType<AutoCodeProposalInput>}
+
+    /**
+ * @summary Refine a draft proposal with another chat message
+ */
+export const useSendAutoCodeProposalMessage = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof sendAutoCodeProposalMessage>>, TError,SendAutoCodeProposalMessageMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof sendAutoCodeProposalMessage>>,
+        TError,
+        SendAutoCodeProposalMessageMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSendAutoCodeProposalMessageMutationOptions(options));
+    }
+
+export const getSubmitAutoCodeProposalUrl = (id: number,) => {
+
+
+
+
+  return `/api/autocode/proposals/${id}/submit`
+}
+
+/**
+ * @summary Send a proposal draft to the owner for review
+ */
+export const submitAutoCodeProposal = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<AutoCodeProposalSummary> => {
+
+  return customFetch<AutoCodeProposalSummary>(getSubmitAutoCodeProposalUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getSubmitAutoCodeProposalMutationKey = () => ['submitAutoCodeProposal'] as const;
+
+export const getSubmitAutoCodeProposalMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitAutoCodeProposal>>, TError,SubmitAutoCodeProposalMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof submitAutoCodeProposal>>, TError,SubmitAutoCodeProposalMutationVariables, TContext> => {
+
+const mutationKey = getSubmitAutoCodeProposalMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof submitAutoCodeProposal>>, SubmitAutoCodeProposalMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  submitAutoCodeProposal(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SubmitAutoCodeProposalMutationResult = NonNullable<Awaited<ReturnType<typeof submitAutoCodeProposal>>>
+
+    export type SubmitAutoCodeProposalMutationError = ErrorType<ApiError>
+    export type SubmitAutoCodeProposalMutationVariables = {id: number}
+
+    /**
+ * @summary Send a proposal draft to the owner for review
+ */
+export const useSubmitAutoCodeProposal = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof submitAutoCodeProposal>>, TError,SubmitAutoCodeProposalMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof submitAutoCodeProposal>>,
+        TError,
+        SubmitAutoCodeProposalMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSubmitAutoCodeProposalMutationOptions(options));
+    }
+
+export const getListAdminAutoCodeProposalsUrl = () => {
+
+
+
+
+  return `/api/admin/autocode/proposals`
+}
+
+/**
+ * @summary List all platform improvement proposals
+ */
+export const listAdminAutoCodeProposals = async ( options?: Parameters<typeof customFetch>[1]): Promise<AutoCodeAdminProposalList> => {
+
+  return customFetch<AutoCodeAdminProposalList>(getListAdminAutoCodeProposalsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAdminAutoCodeProposalsQueryKey = () => {
+    return [
+    `/api/admin/autocode/proposals`
+    ] as const;
+    }
+
+
+export const getListAdminAutoCodeProposalsQueryOptions = <TData = Awaited<ReturnType<typeof listAdminAutoCodeProposals>>, TError = ErrorType<ApiError>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAdminAutoCodeProposals>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAdminAutoCodeProposalsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAdminAutoCodeProposals>>> = ({ signal }) => listAdminAutoCodeProposals({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAdminAutoCodeProposals>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAdminAutoCodeProposalsQueryResult = NonNullable<Awaited<ReturnType<typeof listAdminAutoCodeProposals>>>
+export type ListAdminAutoCodeProposalsQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary List all platform improvement proposals
+ */
+
+export function useListAdminAutoCodeProposals<TData = Awaited<ReturnType<typeof listAdminAutoCodeProposals>>, TError = ErrorType<ApiError>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAdminAutoCodeProposals>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAdminAutoCodeProposalsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGetAdminAutoCodeProposalUrl = (id: number,) => {
+
+
+
+
+  return `/api/admin/autocode/proposals/${id}`
+}
+
+/**
+ * @summary Inspect a proposal's notes and complete source tree
+ */
+export const getAdminAutoCodeProposal = async (id: number, options?: Parameters<typeof customFetch>[1]): Promise<AutoCodeAdminProposalDetail> => {
+
+  return customFetch<AutoCodeAdminProposalDetail>(getGetAdminAutoCodeProposalUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAdminAutoCodeProposalQueryKey = (id: number,) => {
+    return [
+    `/api/admin/autocode/proposals/${id}`
+    ] as const;
+    }
+
+
+export const getGetAdminAutoCodeProposalQueryOptions = <TData = Awaited<ReturnType<typeof getAdminAutoCodeProposal>>, TError = ErrorType<ApiError>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminAutoCodeProposal>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAdminAutoCodeProposalQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAdminAutoCodeProposal>>> = ({ signal }) => getAdminAutoCodeProposal(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAdminAutoCodeProposal>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAdminAutoCodeProposalQueryResult = NonNullable<Awaited<ReturnType<typeof getAdminAutoCodeProposal>>>
+export type GetAdminAutoCodeProposalQueryError = ErrorType<ApiError>
+
+
+/**
+ * @summary Inspect a proposal's notes and complete source tree
+ */
+
+export function useGetAdminAutoCodeProposal<TData = Awaited<ReturnType<typeof getAdminAutoCodeProposal>>, TError = ErrorType<ApiError>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAdminAutoCodeProposal>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAdminAutoCodeProposalQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getReadAdminAutoCodeProposalFileUrl = () => {
+
+
+
+
+  return `/api/admin/autocode/proposal-file`
+}
+
+/**
+ * @summary Read one file from the isolated proposal snapshot
+ */
+export const readAdminAutoCodeProposalFile = async (autoCodeFileInput: AutoCodeFileInput, options?: Parameters<typeof customFetch>[1]): Promise<AutoCodeFileContent> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<AutoCodeFileContent>(getReadAdminAutoCodeProposalFileUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(autoCodeFileInput)
+  }
+);}
+
+
+
+
+
+export const getReadAdminAutoCodeProposalFileMutationKey = () => ['readAdminAutoCodeProposalFile'] as const;
+
+export const getReadAdminAutoCodeProposalFileMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof readAdminAutoCodeProposalFile>>, TError,ReadAdminAutoCodeProposalFileMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof readAdminAutoCodeProposalFile>>, TError,ReadAdminAutoCodeProposalFileMutationVariables, TContext> => {
+
+const mutationKey = getReadAdminAutoCodeProposalFileMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof readAdminAutoCodeProposalFile>>, ReadAdminAutoCodeProposalFileMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  readAdminAutoCodeProposalFile(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReadAdminAutoCodeProposalFileMutationResult = NonNullable<Awaited<ReturnType<typeof readAdminAutoCodeProposalFile>>>
+    export type ReadAdminAutoCodeProposalFileMutationBody = BodyType<AutoCodeFileInput>
+    export type ReadAdminAutoCodeProposalFileMutationError = ErrorType<ApiError>
+    export type ReadAdminAutoCodeProposalFileMutationVariables = {data: BodyType<AutoCodeFileInput>}
+
+    /**
+ * @summary Read one file from the isolated proposal snapshot
+ */
+export const useReadAdminAutoCodeProposalFile = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof readAdminAutoCodeProposalFile>>, TError,ReadAdminAutoCodeProposalFileMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof readAdminAutoCodeProposalFile>>,
+        TError,
+        ReadAdminAutoCodeProposalFileMutationVariables,
+        TContext
+      > => {
+      return useMutation(getReadAdminAutoCodeProposalFileMutationOptions(options));
+    }
+
+export const getReviewAdminAutoCodeProposalUrl = (id: number,) => {
+
+
+
+
+  return `/api/admin/autocode/proposals/${id}/review`
+}
+
+/**
+ * @summary Approve, reject, or mark a proposal applied in Replit
+ */
+export const reviewAdminAutoCodeProposal = async (id: number,
+    autoCodeReviewInput: AutoCodeReviewInput, options?: Parameters<typeof customFetch>[1]): Promise<AutoCodeReviewResult> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Array.isArray(h)) return Object.fromEntries(h);
+    return h;
+  };
+return customFetch<AutoCodeReviewResult>(getReviewAdminAutoCodeProposalUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(autoCodeReviewInput)
+  }
+);}
+
+
+
+
+
+export const getReviewAdminAutoCodeProposalMutationKey = () => ['reviewAdminAutoCodeProposal'] as const;
+
+export const getReviewAdminAutoCodeProposalMutationOptions = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reviewAdminAutoCodeProposal>>, TError,ReviewAdminAutoCodeProposalMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof reviewAdminAutoCodeProposal>>, TError,ReviewAdminAutoCodeProposalMutationVariables, TContext> => {
+
+const mutationKey = getReviewAdminAutoCodeProposalMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reviewAdminAutoCodeProposal>>, ReviewAdminAutoCodeProposalMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  reviewAdminAutoCodeProposal(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReviewAdminAutoCodeProposalMutationResult = NonNullable<Awaited<ReturnType<typeof reviewAdminAutoCodeProposal>>>
+    export type ReviewAdminAutoCodeProposalMutationBody = BodyType<AutoCodeReviewInput>
+    export type ReviewAdminAutoCodeProposalMutationError = ErrorType<ApiError>
+    export type ReviewAdminAutoCodeProposalMutationVariables = {id: number;data: BodyType<AutoCodeReviewInput>}
+
+    /**
+ * @summary Approve, reject, or mark a proposal applied in Replit
+ */
+export const useReviewAdminAutoCodeProposal = <TError = ErrorType<ApiError>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reviewAdminAutoCodeProposal>>, TError,ReviewAdminAutoCodeProposalMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof reviewAdminAutoCodeProposal>>,
+        TError,
+        ReviewAdminAutoCodeProposalMutationVariables,
+        TContext
+      > => {
+      return useMutation(getReviewAdminAutoCodeProposalMutationOptions(options));
     }
 
 export const getListProjectsUrl = (params: ListProjectsParams,) => {

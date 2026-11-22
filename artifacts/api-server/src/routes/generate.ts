@@ -3,6 +3,7 @@ import { GenerateApplicationBody, GenerateApplicationResponse } from "@workspace
 import { GoogleGenAI } from "@google/genai";
 import { hydrateAttachments } from "../lib/attachment-content";
 import { ensureBrowserDependencies } from "../lib/browser-dependencies";
+import { recordAiUsage } from "../lib/ai-usage";
 
 const router: IRouter = Router();
 
@@ -97,6 +98,20 @@ router.post("/generate", async (req, res) => {
       req.log.error("Gemini returned an empty application");
       res.status(502).json({ error: "Gemini n'a renvoyé aucun code exploitable. Réessaie avec une description plus précise." });
       return;
+    }
+
+    try {
+      await recordAiUsage({
+        userId: req.user?.id,
+        provider: "gemini",
+        model: "gemini-3-flash-preview",
+        operation: "application-generation",
+        inputTokens: response.usageMetadata?.promptTokenCount ?? null,
+        outputTokens: response.usageMetadata?.candidatesTokenCount ?? null,
+        totalTokens: response.usageMetadata?.totalTokenCount ?? null,
+      });
+    } catch (error) {
+      req.log.warn({ err: error }, "Could not record AI usage metadata");
     }
 
     res.json(GenerateApplicationResponse.parse({ html }));

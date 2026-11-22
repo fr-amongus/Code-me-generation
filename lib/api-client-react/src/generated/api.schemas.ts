@@ -377,6 +377,292 @@ export interface ShellCommandResult {
   allowedCommands: string[];
 }
 
+export interface AdminAccess {
+  isOwnerAdmin: boolean;
+  bootstrapAvailable: boolean;
+}
+
+export interface AdminBootstrapInput {
+  /**
+     * @minLength 32
+     * @maxLength 256
+     */
+  token: string;
+}
+
+export interface AdminUsageUser {
+  id: string;
+  /** @nullable */
+  username: string | null;
+  createdAt: string;
+  calls: number;
+  callSharePercent: number;
+  tokenCount: number;
+  tokenCallCount: number;
+  tokenSharePercent: number;
+}
+
+export type AdminDashboardPeriod = typeof AdminDashboardPeriod[keyof typeof AdminDashboardPeriod];
+
+
+export const AdminDashboardPeriod = {
+  '7d': '7d',
+  '30d': '30d',
+  '90d': '90d',
+} as const;
+
+export interface AdminDashboard {
+  period: AdminDashboardPeriod;
+  totalUsers: number;
+  trackedCalls: number;
+  tokenReportedCalls: number;
+  reportedTokens: number;
+  users: AdminUsageUser[];
+}
+
+export type FeatureReleaseAudience = typeof FeatureReleaseAudience[keyof typeof FeatureReleaseAudience];
+
+
+export const FeatureReleaseAudience = {
+  all: 'all',
+  admin: 'admin',
+} as const;
+
+export type FeatureReleaseDefaultAudience = typeof FeatureReleaseDefaultAudience[keyof typeof FeatureReleaseDefaultAudience];
+
+
+export const FeatureReleaseDefaultAudience = {
+  all: 'all',
+  admin: 'admin',
+} as const;
+
+export interface FeatureRelease {
+  key: string;
+  label: string;
+  audience: FeatureReleaseAudience;
+  defaultAudience: FeatureReleaseDefaultAudience;
+  /** @nullable */
+  updatedAt: string | null;
+}
+
+export type FeatureReleaseInputAudience = typeof FeatureReleaseInputAudience[keyof typeof FeatureReleaseInputAudience];
+
+
+export const FeatureReleaseInputAudience = {
+  all: 'all',
+  admin: 'admin',
+} as const;
+
+export interface FeatureReleaseInput {
+  audience: FeatureReleaseInputAudience;
+}
+
+export interface FeatureReleaseList {
+  features: FeatureRelease[];
+}
+
+export interface FeatureAccess {
+  key: string;
+  enabled: boolean;
+}
+
+export interface FeatureAccessList {
+  features: FeatureAccess[];
+}
+
+export interface AutoCodeUploadInput {
+  /**
+     * @minLength 1
+     * @maxLength 200
+     */
+  name: string;
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  contentType: string;
+  /**
+     * @minimum 1
+     * @maximum 10485760
+     */
+  size: number;
+}
+
+export interface AutoCodeUploadUrl {
+  uploadId: number;
+  uploadUrl: string;
+}
+
+export interface AutoCodeProposalInput {
+  /**
+     * @minLength 3
+     * @maxLength 12000
+     */
+  message: string;
+  /** @maxItems 5 */
+  uploadIds?: number[];
+}
+
+export type AutoCodeProposalSummaryStatus = typeof AutoCodeProposalSummaryStatus[keyof typeof AutoCodeProposalSummaryStatus];
+
+
+export const AutoCodeProposalSummaryStatus = {
+  draft: 'draft',
+  pending_review: 'pending_review',
+  approved: 'approved',
+  rejected: 'rejected',
+  applied: 'applied',
+} as const;
+
+export interface AutoCodeProposalSummary {
+  id: number;
+  title: string;
+  status: AutoCodeProposalSummaryStatus;
+  latestVersion: number;
+  createdAt: string;
+  updatedAt: string;
+  /** @nullable */
+  submittedAt: string | null;
+}
+
+export type AutoCodeProposalMessageRole = typeof AutoCodeProposalMessageRole[keyof typeof AutoCodeProposalMessageRole];
+
+
+export const AutoCodeProposalMessageRole = {
+  user: 'user',
+  assistant: 'assistant',
+} as const;
+
+export interface AutoCodeProposalMessage {
+  id: number;
+  role: AutoCodeProposalMessageRole;
+  content: string;
+  createdAt: string;
+}
+
+export interface AutoCodeProposalVersion {
+  id: number;
+  version: number;
+  summary: string;
+  changedFiles: string[];
+  addedFiles: string[];
+  deletedFiles: string[];
+  createdAt: string;
+}
+
+export type AutoCodeProposalDetail = AutoCodeProposalSummary & {
+  messages: AutoCodeProposalMessage[];
+  versions: AutoCodeProposalVersion[];
+};
+
+export interface AutoCodeProposalList {
+  proposals: AutoCodeProposalSummary[];
+}
+
+export type AutoCodeAdminProposalSummary = AutoCodeProposalSummary & ({
+  /** @nullable */
+  ownerUsername: string | null;
+});
+
+export interface AutoCodeAdminProposalList {
+  proposals: AutoCodeAdminProposalSummary[];
+}
+
+export type AutoCodeProposalFileAction = typeof AutoCodeProposalFileAction[keyof typeof AutoCodeProposalFileAction];
+
+
+export const AutoCodeProposalFileAction = {
+  context: 'context',
+  added: 'added',
+  modified: 'modified',
+  deleted: 'deleted',
+} as const;
+
+export interface AutoCodeProposalFile {
+  path: string;
+  action: AutoCodeProposalFileAction;
+}
+
+export interface AutoCodeProposalAttachment {
+  id: number;
+  name: string;
+  contentType: string;
+  size: number;
+}
+
+export type AutoCodeAdminProposalDetail = AutoCodeProposalDetail & ({
+  /** @nullable */
+  ownerUsername: string | null;
+  files: AutoCodeProposalFile[];
+  notesMarkdown: string;
+  previewHtml: string;
+  attachments: AutoCodeProposalAttachment[];
+  /** @nullable */
+  reviewNote: string | null;
+});
+
+export type AutoCodeFileContentAction = typeof AutoCodeFileContentAction[keyof typeof AutoCodeFileContentAction];
+
+
+export const AutoCodeFileContentAction = {
+  context: 'context',
+  added: 'added',
+  modified: 'modified',
+  deleted: 'deleted',
+} as const;
+
+export interface AutoCodeFileContent {
+  path: string;
+  action: AutoCodeFileContentAction;
+  content: string;
+  /** @nullable */
+  originalContent: string | null;
+}
+
+export interface AutoCodeFileInput {
+  /** @minimum 1 */
+  proposalId: number;
+  /**
+     * @minLength 1
+     * @maxLength 500
+     */
+  path: string;
+}
+
+export type AutoCodeReviewInputDecision = typeof AutoCodeReviewInputDecision[keyof typeof AutoCodeReviewInputDecision];
+
+
+export const AutoCodeReviewInputDecision = {
+  approve: 'approve',
+  reject: 'reject',
+  mark_applied: 'mark_applied',
+} as const;
+
+export interface AutoCodeReviewInput {
+  decision: AutoCodeReviewInputDecision;
+  /** @maxLength 4000 */
+  note?: string;
+}
+
+export interface AutoCodeReviewResult {
+  proposal: AutoCodeProposalSummary;
+  /** @nullable */
+  reviewNote: string | null;
+}
+
+export type GetAdminDashboardParams = {
+period?: GetAdminDashboardPeriod;
+};
+
+export type GetAdminDashboardPeriod = typeof GetAdminDashboardPeriod[keyof typeof GetAdminDashboardPeriod];
+
+
+export const GetAdminDashboardPeriod = {
+  '7d': '7d',
+  '30d': '30d',
+  '90d': '90d',
+} as const;
+
 export type ListProjectsParams = {
 /**
  * @minLength 8
