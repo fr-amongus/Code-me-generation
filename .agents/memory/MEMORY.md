@@ -6,3 +6,4 @@
 - [Code Me account scope](code-me-account-scope.md) — Code Me registration uses username and password only; recovery is deferred while Replit remains optional.
 - [Code Me update dashboard](code-me-update-dashboard.md) — start Code Me update messages with a task-status table and review affected files before editing.
 - [Code Me secrets and pauses](code-me-secrets-and-pauses.md) — keep secrets private from AI/browser output; pending Q&A blocks further project actions until answered or cancelled.
+- [Code Me Auto-code scope](code-me-autocode-scope.md) — Auto-code changes the Code Me platform only; never modify a user's generated project.
