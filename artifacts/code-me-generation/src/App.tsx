@@ -5,6 +5,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import Home from '@/pages/home';
 import NotFound from '@/pages/not-found';
+import { AdminPage, AdminProposalPage, AutoCodePage } from '@/pages/platform-tools';
 import {
   Route,
   Switch,
@@ -21,6 +22,9 @@ function Router() {
     <RoutedErrorBoundary>
       <Switch>
         <Route path="/" component={Home} />
+        <Route path="/auto-code" component={AutoCodePage} />
+        <Route path="/admin/proposals/:id" component={AdminProposalPage} />
+        <Route path="/admin" component={AdminPage} />
         <Route component={NotFound} />
       </Switch>
     </RoutedErrorBoundary>

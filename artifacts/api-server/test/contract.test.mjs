@@ -18,6 +18,12 @@ async function loadBrowserDependencyHelper() {
   return module.ensureBrowserDependencies;
 }
 
+async function loadTypeScriptModule(relativePath) {
+  const source = await readFile(new URL(`../src/${relativePath}`, import.meta.url), "utf8");
+  const transformed = await transform(source, { loader: "ts", format: "esm", target: "node20" });
+  return import(`data:text/javascript;base64,${Buffer.from(transformed.code).toString("base64")}`);
+}
+
 async function request(path, options = {}, withAuth = true) {
   const headers = new Headers({ "content-type": "application/json", ...(options?.headers ?? {}) });
   if (withAuth && authCookie) headers.set("cookie", authCookie);
@@ -47,6 +53,53 @@ test("3D browser libraries are injected in dependency order without duplicates",
   const alreadyLoaded = `<!doctype html><html><head><script src="${threeScript}"></script></head><body><script>const scene = new THREE.Scene();</script></body></html>`;
   const unchangedDependency = ensureBrowserDependencies(alreadyLoaded);
   assert.equal(unchangedDependency.match(new RegExp(threeScript, "g"))?.length, 1);
+});
+
+test("Auto-code policy rejects secret-shaped prompts and confines source paths", async () => {
+  const policy = await loadTypeScriptModule("lib/auto-code-policy.ts");
+  const allowedSources = new Set(["artifacts/code-me-generation/src/pages/home.tsx"]);
+
+  assert.equal(policy.isCredentialLike("API key = fake-secret-value-123456789"), true);
+  assert.equal(policy.isCredentialLike("Please improve the account page"), false);
+  assert.equal(
+    policy.isWritablePlatformPath("artifacts/code-me-generation/src/pages/new-page.tsx", allowedSources),
+    true,
+  );
+  assert.equal(policy.isWritablePlatformPath("../../.env", allowedSources), false);
+  assert.equal(policy.isWritablePlatformPath("artifacts/code-me-generation/.env", allowedSources), false);
+  assert.equal(policy.isWritablePlatformPath("artifacts/api-server/dist/index.mjs", allowedSources), false);
+  assert.equal(policy.normalizeAutoCodeAttachment("image.png", "image/png"), "image/png");
+  assert.equal(policy.normalizeAutoCodeAttachment("archive.zip", "application/zip"), null);
+
+  const preview = policy.sanitizeAutoCodePreview(
+    '<html><head></head><body><button onclick="fetch(\\'/secret\\')">Open</button><script>alert(1)</script></body></html>',
+  );
+  assert.doesNotMatch(preview, /<script|onclick=/i);
+  assert.match(preview, /Content-Security-Policy/);
+});
+
+test("Auto-code snapshots preserve the original code and track additions and removals", async () => {
+  const snapshots = await loadTypeScriptModule("lib/platform-source.ts");
+  const baseline = [
+    { path: "artifacts/code-me-generation/src/pages/home.tsx", content: "old page" },
+    { path: "artifacts/code-me-generation/src/index.css", content: "old styles" },
+  ];
+  const initial = snapshots.buildInitialSnapshot(baseline);
+  const versionOne = snapshots.applyAutoCodeChanges(baseline, initial, [
+    { path: "artifacts/code-me-generation/src/pages/home.tsx", action: "modify", content: "new page" },
+    { path: "artifacts/code-me-generation/src/pages/new.tsx", action: "add", content: "new file" },
+  ]);
+  assert.equal(versionOne.find((file) => file.path.endsWith("home.tsx")).originalContent, "old page");
+  assert.equal(versionOne.find((file) => file.path.endsWith("new.tsx")).action, "added");
+
+  const versionTwo = snapshots.applyAutoCodeChanges(baseline, versionOne, [
+    { path: "artifacts/code-me-generation/src/pages/new.tsx", action: "delete" },
+    { path: "artifacts/code-me-generation/src/index.css", action: "delete" },
+    { path: "artifacts/code-me-generation/src/pages/home.tsx", action: "add", content: "old page" },
+  ]);
+  assert.equal(versionTwo.some((file) => file.path.endsWith("new.tsx")), false);
+  assert.equal(versionTwo.find((file) => file.path.endsWith("index.css")).action, "deleted");
+  assert.equal(versionTwo.find((file) => file.path.endsWith("home.tsx")).action, "context");
 });
 
 after(async () => {
@@ -237,6 +290,33 @@ test("storage upload URLs require authentication", async () => {
     body: JSON.stringify({ name: "contract.txt", size: 8, contentType: "text/plain" }),
   }, false);
   assert.equal(response.status, 401);
+});
+
+test("Auto-code requires sign-in and the admin dashboard rejects standard accounts", async () => {
+  const anonymousProposals = await request("/autocode/proposals", {}, false);
+  assert.equal(anonymousProposals.status, 401);
+
+  const access = await request("/admin/access");
+  assert.equal(access.status, 200);
+  assert.equal((await access.json()).isOwnerAdmin, false);
+
+  const dashboard = await request("/admin/dashboard");
+  assert.equal(dashboard.status, 403);
+
+  const adminProposals = await request("/admin/autocode/proposals");
+  assert.equal(adminProposals.status, 403);
+
+  const available = await request("/features");
+  assert.equal(available.status, 200);
+  const availablePayload = await available.json();
+  assert.ok(Array.isArray(availablePayload.features));
+
+  const secretShapedPrompt = await request("/autocode/proposals", {
+    method: "POST",
+    body: JSON.stringify({ message: "API key = fake-secret-value-123456789" }),
+  });
+  assert.equal(secretShapedPrompt.status, 400);
+  assert.equal(JSON.stringify(await secretShapedPrompt.json()).includes("fake-secret-value-123456789"), false);
 });
 
 test("a project can pause for a question, resume, improve, and be versioned", { timeout: 180_000 }, async () => {

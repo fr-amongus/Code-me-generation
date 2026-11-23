@@ -30,9 +30,13 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import {
+  getGetAdminAccessQueryKey,
+  getListAvailableFeaturesQueryKey,
   getListProjectMemoryFilesQueryKey,
   getListProjectMessagesQueryKey,
   getListProjectsQueryKey,
+  useGetAdminAccess,
+  useListAvailableFeatures,
   useCreateProject,
   useDeleteProject,
   useListProjectMessages,
@@ -44,6 +48,7 @@ import {
   type ProjectMessage,
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
+import { Link } from 'wouter';
 import { useAuth } from '@workspace/replit-auth-web';
 import ProjectToolbox, { type ToolboxAiAction } from '@/components/project-toolbox';
 import ProjectConversation from '@/components/project-conversation';
@@ -515,6 +520,10 @@ function AiActivityLog({
 export default function Home() {
   const queryClient = useQueryClient();
   const { user, authMethod, isLoading: isAuthLoading, isAuthenticated, login, logout, refresh: refreshAuth } = useAuth();
+  const platformFeatures = useListAvailableFeatures({ query: { queryKey: getListAvailableFeaturesQueryKey() } });
+  const adminAccess = useGetAdminAccess({
+    query: { queryKey: getGetAdminAccessQueryKey(), enabled: isAuthenticated },
+  });
   const workspaceId = useMemo(() => user?.id ?? getWorkspaceId(), [user?.id]);
   const [authDialogOpen, setAuthDialogOpen] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('register');
@@ -1128,7 +1137,10 @@ export default function Home() {
     <main className="min-h-[100dvh] bg-transparent text-[hsl(var(--foreground))]">
       <header className="flex h-[68px] items-center justify-between border-b border-[hsl(var(--border)/.75)] bg-[hsl(var(--background)/.72)] px-4 backdrop-blur-xl sm:px-7">
         <div className="flex items-center gap-7"><BrandMark /><div className="hidden h-5 w-px bg-[hsl(var(--border))] sm:block" /><div className="hidden items-center gap-2 text-[11px] text-[hsl(var(--muted-foreground))] sm:flex"><div className="size-1.5 rounded-full bg-[hsl(var(--primary))] shadow-[0_0_10px_hsl(var(--primary)/.7)]" /><span data-testid="status-workspace">Workspace personnel</span></div></div>
-         <div className="flex items-center gap-2"><button type="button" onClick={() => { setCommandPaletteOpen(true); setCommandQuery(''); }} className="hidden items-center gap-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card)/.45)] px-2.5 py-1.5 text-[10px] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/.35)] hover:text-[hsl(var(--foreground))] sm:inline-flex" data-testid="button-open-command-palette"><TerminalSquare className="size-3.5 text-[hsl(var(--accent))]" /><span>Commandes</span><kbd className="rounded border border-[hsl(var(--border))] px-1 font-mono text-[9px]">⌘K</kbd></button><div className="hidden items-center gap-2 rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--card)/.6)] px-3 py-1.5 font-mono text-[10px] text-[hsl(var(--muted-foreground))] sm:flex"><TerminalSquare className="size-3.5 text-[hsl(var(--accent))]" /> v9.5.0</div><button type="button" onClick={() => { setActiveTab('preview'); setPreviewError(''); setConsoleEntries([]); }} className="group inline-flex items-center gap-2 rounded-lg border border-transparent px-3 py-2 text-[11px] text-[hsl(var(--muted-foreground))] transition-colors hover:border-[hsl(var(--border))] hover:bg-[hsl(var(--card)/.6)] hover:text-[hsl(var(--foreground))]" data-testid="button-reset-header"><RotateCcw className="size-3.5 transition-transform group-hover:-rotate-45" /><span className="hidden sm:inline">Réinitialiser</span></button></div>
+         <div className="flex items-center gap-2">
+          {platformFeatures.data?.features.some((feature) => feature.key === 'autocode' && feature.enabled) && <Link href="/auto-code" className="inline-flex items-center gap-1.5 rounded-lg border border-[hsl(var(--primary)/.3)] bg-[hsl(var(--primary)/.08)] px-2.5 py-2 text-[10px] font-medium text-[hsl(var(--primary))] transition hover:bg-[hsl(var(--primary)/.14)]" data-testid="link-header-autocode"><WandSparkles className="size-3.5" /><span>Auto-code</span></Link>}
+          {isAuthenticated && (adminAccess.data?.isOwnerAdmin || adminAccess.data?.bootstrapAvailable) && <Link href="/admin" className="inline-flex items-center gap-1.5 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card)/.55)] px-2.5 py-2 text-[10px] text-[hsl(var(--muted-foreground))] transition hover:border-[hsl(var(--primary)/.35)] hover:text-[hsl(var(--foreground))]" data-testid="link-header-admin"><ShieldCheck className="size-3.5" /><span>Administration</span></Link>}
+          <button type="button" onClick={() => { setCommandPaletteOpen(true); setCommandQuery(''); }} className="hidden items-center gap-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card)/.45)] px-2.5 py-1.5 text-[10px] text-[hsl(var(--muted-foreground))] hover:border-[hsl(var(--primary)/.35)] hover:text-[hsl(var(--foreground))] sm:inline-flex" data-testid="button-open-command-palette"><TerminalSquare className="size-3.5 text-[hsl(var(--accent))]" /><span>Commandes</span><kbd className="rounded border border-[hsl(var(--border))] px-1 font-mono text-[9px]">⌘K</kbd></button><div className="hidden items-center gap-2 rounded-full border border-[hsl(var(--border))] bg-[hsl(var(--card)/.6)] px-3 py-1.5 font-mono text-[10px] text-[hsl(var(--muted-foreground))] sm:flex"><TerminalSquare className="size-3.5 text-[hsl(var(--accent))]" /> v9.5.0</div><button type="button" onClick={() => { setActiveTab('preview'); setPreviewError(''); setConsoleEntries([]); }} className="group inline-flex items-center gap-2 rounded-lg border border-transparent px-3 py-2 text-[11px] text-[hsl(var(--muted-foreground))] transition-colors hover:border-[hsl(var(--border))] hover:bg-[hsl(var(--card)/.6)] hover:text-[hsl(var(--foreground))]" data-testid="button-reset-header"><RotateCcw className="size-3.5 transition-transform group-hover:-rotate-45" /><span className="hidden sm:inline">Réinitialiser</span></button></div>
       </header>
        <div className="flex flex-wrap items-center gap-2 border-b border-[hsl(var(--border)/.65)] bg-[hsl(var(--background)/.35)] px-4 py-2.5 sm:px-7">
         <label htmlFor="context-attachments" className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card)/.45)] px-2.5 py-1.5 text-[10px] text-[hsl(var(--muted-foreground))] transition-colors hover:border-[hsl(var(--primary)/.45)] hover:text-[hsl(var(--foreground))]">

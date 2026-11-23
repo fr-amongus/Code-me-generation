@@ -10,6 +10,9 @@ import projectAttachmentsRouter from "./project-attachments";
 import projectToolsRouter from "./project-tools";
 import projectMemoryRouter from "./project-memory";
 import projectSecretsRouter from "./project-secrets";
+import adminRouter from "./admin";
+import autoCodeRouter from "./autocode";
+import adminAutoCodeRouter from "./admin-autocode";
 
 const router: IRouter = Router();
 
@@ -24,5 +27,8 @@ router.use(projectAttachmentsRouter);
 router.use(projectToolsRouter);
 router.use(projectMemoryRouter);
 router.use(projectSecretsRouter);
+router.use(adminRouter);
+router.use(autoCodeRouter);
+router.use(adminAutoCodeRouter);
 
 export default router;

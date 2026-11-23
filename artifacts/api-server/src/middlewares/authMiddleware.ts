@@ -1,5 +1,7 @@
 import { type NextFunction, type Request, type Response } from 'express';
 import * as oidc from 'openid-client';
+import { eq } from 'drizzle-orm';
+import { db, usersTable } from '@workspace/db';
 
 import {
   clearSession,
@@ -97,4 +99,32 @@ export function requireAuth(
     return;
   }
   next();
+}
+
+export async function requireOwnerAdmin(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): Promise<void> {
+  if (!req.isAuthenticated() || !req.user?.id) {
+    res.status(401).json({ error: 'Connectez-vous pour accéder à cette page.' });
+    return;
+  }
+
+  try {
+    const [user] = await db
+      .select({ role: usersTable.role })
+      .from(usersTable)
+      .where(eq(usersTable.id, req.user.id))
+      .limit(1);
+
+    if (user?.role !== 'owner') {
+      res.status(403).json({ error: 'L’accès administrateur est réservé au propriétaire.' });
+      return;
+    }
+
+    next();
+  } catch (error) {
+    next(error);
+  }
 }
